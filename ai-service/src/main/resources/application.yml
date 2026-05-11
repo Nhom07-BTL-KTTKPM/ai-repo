@@ -3,6 +3,12 @@ spring:
     import: optional:file:.env[.properties]
   application:
     name: ai-service
+  data:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST}
+      port: ${SPRING_DATA_REDIS_PORT}
+      password: ${SPRING_DATA_REDIS_PASSWORD}
+      timeout: ${SPRING_DATA_REDIS_TIMEOUT}
 
 server:
   port: ${SERVER_PORT}
@@ -22,3 +28,17 @@ auth:
   jwt:
     issuer: ${AUTH_JWT_ISSUER}
     secret: ${AUTH_JWT_SECRET}
+
+ai:
+  gemini:
+    api-key: ${GEMINI_API_KEY}
+    model: ${GEMINI_MODEL}
+    endpoint: ${GEMINI_API_ENDPOINT:https://generativelanguage.googleapis.com/v1beta/models}
+  rag:
+    top-k: ${AI_RAG_TOP_K:5}
+    max-context-tokens: ${AI_RAG_MAX_CONTEXT_TOKENS:2048}
+  retry:
+    max-attempts: ${AI_RETRY_MAX_ATTEMPTS:3}
+    backoff:
+      initial: ${AI_RETRY_BACKOFF_INITIAL:1s}
+      max: ${AI_RETRY_BACKOFF_MAX:5s}
