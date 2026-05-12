@@ -53,6 +53,10 @@ ai:
   cache:
     query-ttl: ${AI_CACHE_QUERY_TTL:10m}
     context-ttl: ${AI_CACHE_CONTEXT_TTL:30m}
+  chat:
+    retention:
+      enabled: ${AI_CHAT_RETENTION_ENABLED:false}
+      message-ttl: ${AI_CHAT_RETENTION_MESSAGE_TTL:30d}
   clients:
     internal-header-name: ${AI_INTERNAL_HEADER_NAME:X-Internal-Api-Key}
     internal-api-key: ${AI_INTERNAL_API_KEY}

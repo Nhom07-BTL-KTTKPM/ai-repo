@@ -76,6 +76,7 @@ public class GeminiClient {
         List<Double> values = response == null || response.getEmbedding() == null
                 ? List.of()
                 : response.getEmbedding().getValues();
+        logger.info("Gemini embedding latencyMs={}, dimensions={}", latencyMs, values.size());
         return new GeminiEmbeddingResult(values, latencyMs);
     }
 

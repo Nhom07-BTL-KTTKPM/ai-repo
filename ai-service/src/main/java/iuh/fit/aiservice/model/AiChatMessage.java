@@ -35,4 +35,7 @@ public class AiChatMessage {
 
     @Indexed
     private Instant createdAt;
+
+    @Indexed(expireAfterSeconds = 0)
+    private Instant expireAt;
 }

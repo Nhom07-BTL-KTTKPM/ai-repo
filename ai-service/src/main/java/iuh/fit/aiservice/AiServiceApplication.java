@@ -1,6 +1,7 @@
 package iuh.fit.aiservice;
 
 import iuh.fit.aiservice.config.AiCacheProperties;
+import iuh.fit.aiservice.config.AiChatRetentionProperties;
 import iuh.fit.aiservice.config.AiClientProperties;
 import iuh.fit.aiservice.config.AiGeminiProperties;
 import iuh.fit.aiservice.config.AiRagProperties;
@@ -17,7 +18,8 @@ import org.springframework.cloud.openfeign.EnableFeignClients;
         AiRagProperties.class,
         AiRetryProperties.class,
         AiCacheProperties.class,
-        AiClientProperties.class
+        AiClientProperties.class,
+        AiChatRetentionProperties.class
 })
 public class AiServiceApplication {
 
