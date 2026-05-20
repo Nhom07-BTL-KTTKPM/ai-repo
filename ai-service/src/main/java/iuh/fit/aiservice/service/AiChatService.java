@@ -23,10 +23,11 @@ import iuh.fit.shared.error.ErrorCode;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 
-import java.time.Instant;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -226,6 +227,8 @@ private static final String ADVICE_DISCLAIMER =
     private final AiRagProperties ragProperties;
     private final AiChatRetentionProperties retentionProperties;
 
+    private static final int DEFAULT_SUGGESTED_TOP_N = 3;
+
     public AiChatService(
             AiChatSessionRepository sessionRepository,
             AiChatMessageRepository messageRepository,
@@ -294,10 +297,11 @@ private static final String ADVICE_DISCLAIMER =
                 request.getTopK()
         );
 
+        List<CatalogSemanticSearchItem> selectedItems = selectSuggestedItems(snapshot.items(), request.getTopK());
         String prompt = promptBuilder.buildPrompt(snapshot, history, request.getMessage());
         GeminiClient.GeminiChatResult result = geminiChatService.generateReply(prompt);
 
-        String replyText = appendDisclaimer(result.text());
+        String replyText = buildReply(result.text(), selectedItems);
         AiChatMessage assistantMessage = AiChatMessage.builder()
                 .sessionId(session.getId())
                 .customerId(request.getCustomerId())
@@ -312,8 +316,8 @@ private static final String ADVICE_DISCLAIMER =
         session.setLastMessageAt(assistantMessage.getCreatedAt());
         sessionRepository.save(session);
 
-        List<SuggestedProduct> suggestions = buildSuggestions(snapshot.items());
-        persistRecommendations(request.getCustomerId(), snapshot.items());
+        List<SuggestedProduct> suggestions = buildSuggestions(selectedItems);
+        persistRecommendations(request.getCustomerId(), selectedItems);
 
         updateChatContextCache(session, history, userMessage, assistantMessage);
 
@@ -462,6 +466,57 @@ private static final String ADVICE_DISCLAIMER =
             return ADVICE_DISCLAIMER.trim();
         }
         return text + ADVICE_DISCLAIMER;
+    }
+
+    private List<CatalogSemanticSearchItem> selectSuggestedItems(
+            List<CatalogSemanticSearchItem> items,
+            Integer topKOverride
+    ) {
+        if (items == null || items.isEmpty()) {
+            return List.of();
+        }
+        int maxCount = resolveSuggestedCount(topKOverride);
+        return items.stream()
+            .filter(Objects::nonNull)
+            .filter(item -> item.getProductId() != null)
+            .sorted(Comparator.comparing(
+                CatalogSemanticSearchItem::getScore,
+                Comparator.nullsLast(Double::compareTo)
+            ).reversed())
+            .limit(maxCount)
+            .collect(Collectors.toList());
+    }
+
+    private int resolveSuggestedCount(Integer topKOverride) {
+        if (topKOverride == null || topKOverride < 1) {
+            return DEFAULT_SUGGESTED_TOP_N;
+        }
+        return Math.min(topKOverride, DEFAULT_SUGGESTED_TOP_N);
+    }
+
+    private String buildReply(String modelText, List<CatalogSemanticSearchItem> selectedItems) {
+        StringBuilder builder = new StringBuilder();
+        if (selectedItems == null || selectedItems.isEmpty()) {
+            builder.append("Hiện tại hệ thống chưa tìm thấy sản phẩm phù hợp trong kho để gợi ý.");
+        } else {
+            builder.append("Gợi ý sản phẩm phù hợp:\n");
+            int index = 1;
+            for (CatalogSemanticSearchItem item : selectedItems) {
+                if (item == null || item.getName() == null || item.getName().isBlank()) {
+                    continue;
+                }
+                builder.append(index).append(". ").append(item.getName().trim()).append("\n");
+                index++;
+            }
+        }
+
+        String explanation = modelText == null ? "" : modelText.trim();
+        if (!explanation.isBlank()) {
+            builder.append("\n");
+            builder.append(explanation);
+        }
+
+        return appendDisclaimer(builder.toString());
     }
 
     private Instant resolveExpireAt(Instant createdAt) {
