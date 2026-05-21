@@ -10,7 +10,7 @@ import iuh.fit.aiservice.dto.client.CatalogSemanticSearchRequest;
 import iuh.fit.aiservice.dto.client.CatalogSemanticSearchResponse;
 import iuh.fit.aiservice.dto.client.CustomerProfileResponse;
 import iuh.fit.aiservice.model.ProductViewLog;
-import iuh.fit.aiservice.repo.ProductViewLogRepository;
+import iuh.fit.aiservice.repo.ProductViewLogMongoRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.PageRequest;
@@ -33,7 +33,7 @@ public class ContextRetrievalService {
 
     private final CatalogServiceClient catalogServiceClient;
     private final UserServiceClient userServiceClient;
-    private final ProductViewLogRepository productViewLogRepository;
+    private final ProductViewLogMongoRepository productViewLogRepository;
     private final AiContextCacheService cacheService;
     private final GeminiClient geminiClient;
     private final AiRagProperties ragProperties;
@@ -41,7 +41,7 @@ public class ContextRetrievalService {
     public ContextRetrievalService(
             CatalogServiceClient catalogServiceClient,
             UserServiceClient userServiceClient,
-            ProductViewLogRepository productViewLogRepository,
+            ProductViewLogMongoRepository productViewLogRepository,
             AiContextCacheService cacheService,
             GeminiClient geminiClient,
             AiRagProperties ragProperties
@@ -64,7 +64,8 @@ public class ContextRetrievalService {
 
     private CustomerProfileResponse loadProfile(String customerId) {
         try {
-            return userServiceClient.getCustomerById(customerId);
+            var response = userServiceClient.getCustomerById(customerId);
+            return response == null ? null : response.data();
         } catch (Exception ex) {
             logger.warn("Failed to load customer profile for {}", customerId, ex);
             return null;
