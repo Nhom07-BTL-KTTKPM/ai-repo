@@ -15,4 +15,6 @@ public class CatalogSemanticSearchRequest {
 
     private List<Double> embedding;
     private Integer topK;
+    private Double minScore;
+    private String queryText;
 }

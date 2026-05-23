@@ -1,11 +1,10 @@
-package iuh.fit.aiservice.dto.client;
+package iuh.fit.aiservice.recommendation.client.dto;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
 
@@ -13,18 +12,16 @@ import java.util.UUID;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class CatalogSemanticSearchItem {
+public class CatalogProductResponse {
 
-    private UUID productId;
+    private UUID id;
     private String name;
-    private String description;
-    private String ingredients;
-    private String usageInstructions;
+    private UUID categoryId;
     private String categoryName;
+    private UUID brandId;
     private String brandName;
     private List<String> suitableSkinTypes;
     private List<String> skinConcerns;
-    private BigDecimal minPrice;
-    private BigDecimal maxPrice;
-    private Double score;
+    private String ingredients;
+    private Boolean isActive;
 }

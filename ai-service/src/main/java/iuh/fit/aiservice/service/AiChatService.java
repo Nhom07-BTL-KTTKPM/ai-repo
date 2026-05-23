@@ -1,6 +1,5 @@
 package iuh.fit.aiservice.service;
 
-import iuh.fit.aiservice.client.GeminiClient;
 import iuh.fit.aiservice.config.AiChatRetentionProperties;
 import iuh.fit.aiservice.config.AiRagProperties;
 import iuh.fit.aiservice.dto.cache.ChatContextCacheEntry;
@@ -23,205 +22,254 @@ import iuh.fit.shared.error.ErrorCode;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 
-import java.time.Instant;
+import java.math.BigDecimal;
+import java.text.Normalizer;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Arrays;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.regex.Pattern;
+import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
 @Service
 public class AiChatService {
 
-    private static final List<String> DOMAIN_KEYWORDS = Arrays.asList(
-        // --- Từ khóa chung về mỹ phẩm & da ---
-        "mỹ phẩm", "my pham", "mỹ phẩm",            // không dấu & có dấu
-        "cosmetic", "skincare", "chăm sóc da", "cham soc da",
-        "dưỡng da", "duong da", "làm đẹp", "lam dep",
-        "da", "skin", "da mặt", "da mat", "da body",
-        "da dầu", "da dau", "da khô", "da kho",
-        "da hỗn hợp", "da hon hop", "da nhạy cảm", "da nhay cam",
-        "da mụn", "da mun", "da lão hóa", "da lao hoa",
+    private static final Set<String> DOMAIN_KEYWORDS = new LinkedHashSet<>(List.of(
+        // Từ khóa gốc
+        "my pham", "skincare", "cosmetic", "da", "skin", "serum", "cleanser", "toner",
+        "kem duong", "moisturizer", "mat na", "mask", "retinol", "niacinamide",
+        "vitamin c", "bha", "aha", "ceramide", "kem chong nang", "sunscreen",
+        "mun", "tham", "lo chan long", "da dau", "da kho", "da nhay cam",
+        "san pham", "hang", "thuong hieu", "brand", "hang nao", "cua hang",
+        "cerave", "laroche posay", "la roche posay", "bioderma", "cetaphil",
 
-        // --- Vấn đề về da ---
-        "mụn", "mun", "acne", "pimple", "mụn trứng cá", "mun trung ca",
-        "mụn đầu đen", "mun dau den", "mụn đầu trắng",
-        "mụn bọc", "mụn ẩn", "mụn viêm", "mụn nang",
-        "thâm", "tham", "sẹo", "seo", "sẹo mụn",
-        "nám", "nam", "tàn nhang", "tan nhang",
-        "đốm nâu", "dom nau", "tăng sắc tố", "hyperpigmentation",
-        "da không đều màu", "da khong deu mau", "dull skin",
-        "lỗ chân lông to", "lo chan long to", "se khít lỗ chân lông",
-        "dầu", "dau", "nhờn", "nhờn", "oily",
-        "kiềm dầu", "kiem dau", "oil control",
-        "khô da", "kho da", "bong tróc", "bong troc",
-        "mẩn đỏ", "man do", "đỏ da", "do da",
-        "kích ứng", "kich ung", "viêm da", "eczema",
-        "chàm", "cham", "rosacea", "vảy nến", "vay nen",
+        // Thành phần
+        "hyaluronic acid", "acid hyaluronic", "salicylic acid", "acid salicylic",
+        "glycolic acid", "lactic acid", "azelaic acid", "tranexamic acid",
+        "bakuchiol", "peptide", "collagen", "squalane", "centella", "madecassoside",
+        "panthenol", "glycerin", "aloe vera", "nha dam", "tram tra", "tea tree",
+        "tra xanh", "green tea", "dau dua", "coconut oil", "dau argan",
+        "vitamin e", "vitamin b5", "tretinoin", "adapalene", "benzoyl peroxide",
+        "zinc", "cica", "allantoin", "arbutin", "kojic acid", "licorice",
 
-        // --- Mục tiêu dưỡng da ---
-        "dưỡng ẩm", "duong am", "cấp ẩm", "cap am", "cấp nước",
-        "làm dịu", "lam diu", "phục hồi", "phuc hoi",
-        "tái tạo", "tai tao", "chống lão hóa", "chong lao hoa",
-        "anti-aging", "anti aging", "anti wrinkle", "chống nhăn",
-        "làm trắng", "lam trang", "sáng da", "sang da",
-        "đều màu da", "deu mau da", "mờ thâm", "mo tham",
-        "giảm mụn", "giam mun", "trị mụn", "tri mun",
-        "ngừa mụn", "ngua mun", "se khít lỗ chân lông", "se khit",
+        // Loại da & vấn đề
+        "da hon hop", "da thuong", "da dang mat nuoc", "da mat nuoc",
+        "mun trung ca", "mun dau den", "mun cam", "mun boc", "mun an",
+        "seo mun", "vet tham", "tham mun", "nam", "tan nhang", "dom nau",
+        "da khong deu mau", "lao hoa", "nep nhan", "vet chan chim",
+        "da chay xe", "da xin mau", "lo chan long to", "se khit lo chan long",
+        "dau", "nhon", "bong dau", "kho rap", "bong troc", "kich ung", "man do",
+        "rosacea", "viem da", "eczema", "cham", "vay nen", "da mun",
 
-        // --- Loại sản phẩm ---
-        "kem dưỡng", "kem duong", "cream", "moisturizer",
-        "sữa rửa mặt", "sua rua mat", "cleanser", "foam cleanser",
-        "gel rửa mặt", "gel rua mat",
-        "tẩy trang", "tay trang", "makeup remover",
-        "dầu tẩy trang", "dau tay trang", "nước tẩy trang",
-        "toner", "nước hoa hồng", "nuoc hoa hong",
-        "lotion", "essence", "serum", "ampoule",
-        "emulsion", "kem mắt", "eye cream", "kem mat",
-        "mặt nạ", "mat na", "mask", "sheet mask",
-        "sleeping mask", "wash off mask", "peeling",
-        "tẩy tế bào chết", "tay te bao chet", "exfoliator",
-        "scrub", "peeling gel", "dầu dưỡng", "facial oil",
-        "xịt khoáng", "mist", "xịt dưỡng",
+        // Dạng sản phẩm
+        "gel", "cream", "lotion", "oil", "balm", "sua", "tinh chat", "nuoc",
+        "xit", "mist", "bot", "foam", "mat na giay", "sheet mask", "mat na ngu",
+        "sleeping mask", "tay te bao chet vat ly", "tay da chet hoa hoc",
+        "peel da", "toner pad", "mieng dan mun", "pimple patch",
 
-        // --- Thành phần hoạt chất (có thể viết liền hoặc cách) ---
-        "retinol", "retinoid", "tretinoin", "adapalene",
-        "retinaldehyde", "retinyl palmitate",
-        "vitamin c", "vitamin c", "ascorbic acid",
-        "niacinamide", "vitamin b3",
-        "salicylic acid", "bha", "aha",
-        "glycolic acid", "lactic acid", "mandelic acid",
-        "azelaic acid", "hyaluronic acid", "hyaluronate",
-        "ceramide", "peptide", "copper peptide",
-        "matrixyl", "argireline",
-        "centella asiatica", "rau má", "rau ma",
-        "madecassoside", "cica", "panthenol", "vitamin b5",
-        "vitamin e", "ferulic acid", "resveratrol",
-        "tranexamic acid", "arbutin", "kojic acid",
-        "glutathione", "alpha arbutin",
-        "niacin", "zinc pca", "allantoin", "urea",
-        "glycerin", "squalane", "squalene",
-        "shea butter", "bơ hạt mỡ", "jojoba oil", "dầu jojoba",
-        "rosehip oil", "dầu tầm xuân", "tea tree oil", "dầu tràm trà",
-        "aloe vera", "nha đam", "nha dam",
-        "snail mucin", "ốc sên", "snail secretion filtrate",
-        "propolis", "sữa ong chúa", "bee venom",
-        "collagen", "elastin", "stem cell", "tế bào gốc",
-        "fermented", "lên men", "gạo", "rice", "oat", "yến mạch",
-        "pH", "ph", "độ pH", "do pH", "acid", "acidic", "base", "alkaline",
-        "axit", "kiềm", "acid/base",
+        // Quy trình skincare
+        "routine", "cham soc da", "buoi sang", "buoi toi", "double cleansing",
+        "tay trang", "sua rua mat", "nuoc can bang", "kem duong", "kem mat",
+        "duong moi", "mat na", "tay da chet", "chong nang", "duong am",
 
-        // --- Chống nắng ---
-        "chống nắng", "chong nang", "sunscreen", "sunblock",
-        "sữa chống nắng", "gel chống nắng", "stick chống nắng",
-        "spf", "pa\\+\\+\\+", "uv", "uva", "uvb",
-        "broad spectrum", "phổ rộng", "chỉ số chống nắng",
+        // Trang điểm
+        "makeup", "trang diem", "kem nen", "foundation", "cushion", "phan phu",
+        "che khuyet diem", "concealer", "ma hong", "blush", "highlighter",
+        "tao khoi", "contour", "phan mat", "eyeshadow", "ke mat", "eyeliner",
+        "mascara", "chi ke may", "eyebrow", "son moi", "lipstick", "son tint",
+        "lip gloss", "son duong", "lip balm", "xit khoa makeup", "setting spray",
 
-        // --- Nhãn hiệu phổ biến (lưu ý escape ký tự đặc biệt) ---
-        "La Roche-Posay", "La Roche Posay",
-        "Vichy", "Bioderma", "Avene", "Eucerin",
-        "CeraVe", "Cerave", "Cetaphil", "Neutrogena",
-        "Simple", "The Ordinary", "The Inkey List",
-        "Paula's Choice", "Paulas Choice",
-        "Cosrx", "COSRX", "Klairs", "Dear Klairs",
-        "Missha", "Innisfree", "innisfree",
-        "Laneige", "Sulwhasoo", "Hada Labo", "HadaLabo",
-        "Senka", "Biore", "Anessa", "Skin Aqua",
-        "Nivea", "Rohto", "Kose", "Shiseido",
-        "Curel", "DHC", "Iunik", "Purito",
-        "Beauty of Joseon", "Beauty Of Joseon",
-        "Benton", "Etude House", "EtudeHouse",
-        "Tony Moly", "Some By Mi", "SomeByMi",
-        "Isntree", "Round Lab", "RoundLab",
-        "TIRTIR", "Medicube", "Dr.Althea",
-        "SKIN1004", "Anua", "ma:nyo", "Manyo",
-        "Rovectin", "Torriden", "Numee", "House",
-        "L'Oreal", "Loreal", "Garnier", "Olay",
-        "Pond's", "Ponds", "Hazeline", "Nuxe",
-        "Caudalie", "Kiehl's", "Kiehls",
-        "Estee Lauder", "Lancome", "Clinique",
-        "SK-II", "Shu Uemura", "Decorte",
-        "Whoo", "History of Whoo",
-        "Dior", "Chanel", "YSL", "MAC", "Bobbi Brown",
-        "Origins", "The Body Shop", "Lush",
-        "Mediheal", "Dr.Jart+", "Dr Jart",
+        // Chăm sóc tóc
+        "dau goi", "shampoo", "dau xa", "conditioner", "kem u toc", "hair mask",
+        "dau duong toc", "hair oil", "xit duong toc", "serum toc", "goi dau",
+        "cham soc toc", "hair", "haircare", "da dau", "scalp", "gau", "ngua",
+        "rung toc", "kich thich moc toc",
 
-        // --- Câu hỏi mua hàng & tương tác ---
-        "review", "đánh giá", "review sản phẩm",
-        "có tốt không", "có nên mua", "có nên dùng",
-        "so sánh", "compare", "loại nào tốt",
-        "tư vấn", "tu van", "gợi ý", "suggest",
-        "công dụng", "cong dung", "hiệu quả", "hieu qua",
-        "cách dùng", "cach dung", "cách sử dụng",
-        "thành phần", "thanh phan", "bảng thành phần",
-        "full ingredient", "chất lượng", "chat luong",
-        "giá", "gia", "giá cả", "mua", "mua ở đâu",
-        "order", "ship", "đặt hàng", "dat hang"
-    );
+        // Chăm sóc cơ thể
+        "sua tam", "body wash", "sua duong the", "body lotion", "kem tay",
+        "hand cream", "kem chan", "foot cream", "tay te bao chet body",
+        "body scrub", "lan khu mui", "deodorant", "nuoc hoa", "perfume",
+        "fragrance",
 
-    private static final Pattern DOMAIN_PATTERN = Pattern.compile(
-        "\\b(?:" + String.join("|", DOMAIN_KEYWORDS) + ")\\b",
-        Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE
-    );
+        // Truy vấn thực tế tiếng Việt
+        "cach tri mun", "serum tri tham", "kem chong nang cho da dau",
+        "sua rua mat cho da nhay cam", "top kem duong", "review my pham",
+        "my pham han quoc", "my pham nhat", "my pham phap", "my pham my",
+        "hang noi dia", "xach tay",
 
-    private static final List<String> HARM_KEYWORDS = Arrays.asList(
-        "gây hại", "gay hai", "gây hại da",
-        "độc hại", "doc hai", "toxic", "độc tố",
-        "nguy hiểm", "nguy hiem",
-        "ung thư", "ung thu", "cancer",
-        "tử vong", "tu vong", "chết người",
-        "dị ứng nặng", "di ung nang",
-        "phản ứng mạnh", "phan ung manh",
-        "phản ứng phụ", "side effect",
-        "kích ứng da", "kich ung da",
-        "nổi mụn thêm", "nổi mụn tệ hơn",
-        "gây mụn", "gay mun", "lên mụn",
-        "làm mụn nặng hơn", "breakout",
-        "tác hại", "tac hai", "tác dụng xấu",
-        "tổn thương da", "ton thuong da",
-        "hư da", "hỏng da", "damage skin",
-        "bào mòn da", "bao mon da", "mỏng da",
-        "châm chích", "sting", "rát", "redness",
-        "đỏ da", "do da", "bong tróc da",
-        "viêm da tiếp xúc", "dermatitis",
-        "có hại không", "co hai khong",
-        "có độc không", "co doc khong",
-        "có an toàn không", "co an toan khong",
-        "an toàn da", "safety skin"
-    );
+        // Thương hiệu mở rộng
+        "the ordinary", "paulas choice", "vichy", "avene", "neutrogena", "eucerin",
+        "klairs", "cosrx", "innisfree", "laneige", "sulwhasoo", "sk-ii",
+        "estee lauder", "lancome", "shiseido", "anessa", "biore", "hada labo",
+        "rohto", "melano cc", "skin1004", "some by mi", "senka", "simple",
+        "nivea", "ponds", "olay", "loreal", "maybelline", "revlon"
+    ));
 
-    private static final Pattern HARM_PATTERN = Pattern.compile(
-        "\\b(?:" + String.join("|", HARM_KEYWORDS) + ")\\b",
-        Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE
+    private static final Set<String> SAFETY_SENSITIVE_KEYWORDS = new LinkedHashSet<>(List.of(
+        "gay hai", "doc hai", "nguy hiem", "ung thu", "side effect",
+        "bao mon", "ton thuong da",
+        // Mở rộng
+        "kich ung", "di ung", "noi man", "do da", "ngua", "phat ban",
+        "rat", "cham chich", "bong troc nang", "tac dung phu", "phan ung",
+        "an toan", "paraben", "sulfate", "con", "alcohol", "huong lieu",
+        "fragrance", "chat bao quan", "preservative", "chat tao mau",
+        "silicone", "dau khoang", "mineral oil", "co hai", "doc hai",
+        "gay ung thu", "gay kich ung", "cam dung", "thu hoi", "canh bao",
+        "FDA", "dermatologist tested", "hypoallergenic", "non-comedogenic"
+    ));
+
+    private static final Set<String> BRAND_DISCOVERY_KEYWORDS = new LinkedHashSet<>(List.of(
+        "hang", "thuong hieu", "brand", "san pham", "dong san pham", "cerave",
+        // Mở rộng
+        "hang", "cua hang nao", "thuong hieu nao tot", "brand nao",
+        "nen mua hang nao", "dong san pham", "san pham cua", "review hang",
+        "so sanh cac hang", "top thuong hieu", "best brand", "cac hang my pham",
+        "han quoc", "nhat ban", "phap", "my", "viet nam", "thuan chay", "vegan",
+        "cruelty-free", "organic", "thien nhien",
+        // Thêm tên thương hiệu làm đối tượng khám phá
+        "the ordinary", "paulas choice", "cosrx", "innisfree", "laneige",
+        "vichy", "avene", "neutrogena", "bioderma", "la roche posay"
+    ));
+
+    private static final Set<String> HARD_BLOCK_KEYWORDS = new LinkedHashSet<>(List.of(
+        "chung khoan", "co phieu", "bitcoin", "bong da", "the thao", "chinh tri",
+        "code java", "lap trinh", "toan hoc", "vat ly", "lich su", "dia ly",
+        // Mở rộng
+        "bong chuyen", "cau long", "boi loi", "tennis", "game online", "esports",
+        "tieu thuyet", "trinh tham", "khoa hoc vien tuong", "du hanh vu tru",
+        "may tinh", "dien thoai", "phan mem", "mang xa hoi", "marketing", "SEO",
+        "tieu duong", "tim mach", "huyet ap", "am nhac", "phim anh", "du lich",
+        "am thuc", "nau an", "cong thuc mon", "xe co", "o to", "bat dong san",
+        "tinh yeu", "hen ho", "meo vat nha bep"
+    ));
+
+    private static final Set<String> PRODUCT_SUGGESTION_KEYWORDS = new LinkedHashSet<>(List.of(
+        "goi y", "tu van", "nen dung", "nen mua", "san pham", "routine",
+        "phu hop", "so sanh", "compare", "review", "de xuat", "chon", "lua chon",
+        "gia", "tam", "khoang", "duoi", "tren",
+        // Mở rộng
+        "suggest", "khuyen", "tot nhat", "top", "ban chay", "best seller",
+        "duoc ua chuong", "da dau nen dung gi", "da kho nen dung kem gi",
+        "cach dung", "huong dan", "lieu trinh", "ket hop", "buoi sang",
+        "buoi toi", "ngay", "dem", "se khit lo chan long", "tri tham",
+        "duong trang", "trang da", "routine cho da dau", "cach xay dung routine",
+        "buoc skincare", "quy trinh cham soc da", "nen dung san pham nao",
+        "tot nhat cho da mun", "top kem chong nang", "best serum",
+        "review chi tiet", "so sanh", "su khac biet", "lua chon thay the",
+        "dupe", "gia re", "binh dan", "cao cap", "luxury", "hop tui tien",
+        "cho hoc sinh", "sinh vien", "van phong", "me bau", "ba bau",
+        "cho nam", "cho nu", "da dau mun nen dung gi", "da kho nen dung gi",
+        "kem duong am cho mua dong", "sua rua mat mua he", "tu van",
+        "khuyen dung", "bac si da lieu khuyen dung", "theo bac si"
+    ));
+
+    private static final Set<String> COSMETIC_CONTEXT_KEYWORDS = new LinkedHashSet<>(List.of(
+        "my pham", "cham soc da", "duong da", "lam sach", "duong am", "tri mun",
+        "serum", "toner", "cleanser", "sunscreen", "moisturizer", "makeup",
+        "kem chong nang", "kem duong", "sua rua mat", "mat na", "tay te bao chet",
+        "thuong hieu", "brand", "hang", "san pham", "thanh phan", "routine",
+        // Mở rộng
+        "mun dau den", "mun boc", "seo", "nam", "tan nhang", "lao hoa da",
+        "chong lao hoa", "collagen", "elastin", "duong trang", "trang da",
+        "sang da", "deu mau da", "cap am", "cap nuoc", "duong am sau",
+        "phuc hoi da", "hang rao bao ve da", "skin barrier", "da yeu",
+        "da ton thuong", "kich ung", "diu da", "chong oxy hoa", "antioxidant",
+        "chong viem", "lam sach sau", "tay trang", "nuoc tay trang",
+        "dau tay trang", "sap tay trang", "sua rua mat diu nhe", "gel rua mat",
+        "bot rua mat", "mat na dat set", "clay mask", "mat na ngu",
+        "sleeping mask", "mat na lot", "peel-off mask", "dau duong", "face oil",
+        "dau goi", "dau xa", "mat na toc", "serum toc", "cham soc co the",
+        "body care", "tay", "chan", "moi", "lip care", "son duong moi",
+        "mat na moi", "tay da chet moi", "duong mi", "eyelash serum",
+        "nuoc hoa hong", "xit khoang", "thermal water"
+    ));
+
+    private static final Map<String, List<String>> PRODUCT_TYPE_ALIASES = Map.ofEntries(
+        // Các mục gốc
+        Map.entry("serum", List.of("serum", "tinh chat", "essence", "ampoule", "concentrate")),
+        Map.entry("sunscreen", List.of("sunscreen", "sunblock", "kem chong nang", "chong nang")),
+        Map.entry("cleanser", List.of("cleanser", "face wash", "foam cleanser", "sua rua mat", "rua mat")),
+        Map.entry("moisturizer", List.of("moisturizer", "hydrating cream", "kem duong", "duong am")),
+        Map.entry("toner", List.of("toner", "balancing toner", "nuoc can bang")),
+        Map.entry("mask", List.of("mask", "mat na")),
+        Map.entry("shampoo", List.of("shampoo", "dau goi", "goi dau", "toc", "cham soc toc", "hair", "haircare")),
+        Map.entry("gel", List.of("gel")),
+        Map.entry("cream", List.of("cream", "kem")),
+        Map.entry("makeup_remover", List.of("makeup remover", "tay trang", "nuoc tay trang", "dau tay trang", "sap tay trang", "micellar water")),
+        Map.entry("exfoliator", List.of("exfoliator", "tay te bao chet", "tay da chet", "bha", "aha", "pha", "peel")),
+        Map.entry("treatment", List.of("treatment", "dac tri", "cham mun", "tri mun", "retinol", "tretinoin")),
+        Map.entry("bodycare", List.of("bodycare", "sua tam", "kem tuyet", "duong the", "body lotion", "body wash")),
+        Map.entry("makeup", List.of("makeup", "trang diem")),
+
+        // Mở rộng
+        Map.entry("hair_conditioner", List.of("conditioner", "dau xa", "xa toc", "kem xa")),
+        Map.entry("hair_mask", List.of("hair mask", "kem u toc", "mat na toc")),
+        Map.entry("hair_oil", List.of("hair oil", "dau duong toc", "serum toc")),
+        Map.entry("scalp_treatment", List.of("scalp treatment", "dieu tri da dau", "cham soc da dau")),
+        Map.entry("body_lotion", List.of("body lotion", "sua duong the", "kem duong the", "body cream")),
+        Map.entry("hand_cream", List.of("hand cream", "kem duong tay")),
+        Map.entry("foot_cream", List.of("foot cream", "kem duong chan")),
+        Map.entry("lip_balm", List.of("lip balm", "son duong", "duong moi")),
+        Map.entry("eye_cream", List.of("eye cream", "kem mat", "duong mat")),
+        Map.entry("face_oil", List.of("face oil", "dau duong mat", "facial oil")),
+        Map.entry("mist", List.of("mist", "xit khoang", "facial mist", "setting spray")),
+        Map.entry("ampoule", List.of("ampoule", "ampule")),
+        Map.entry("essence", List.of("essence", "nuoc than", "first essence")),
+        Map.entry("emulsion", List.of("emulsion", "nhu tuong")),
+        Map.entry("sheet_mask", List.of("sheet mask", "mat na giay")),
+        Map.entry("sleeping_mask", List.of("sleeping mask", "mat na ngu")),
+        Map.entry("wash_off_mask", List.of("wash off mask", "mat na rua", "mat na dat set")),
+        Map.entry("sunscreen_stick", List.of("sunscreen stick", "son chong nang", "chong nang dang thoi")),
+        Map.entry("sun_cushion", List.of("sun cushion", "cushion chong nang")),
+        Map.entry("primer", List.of("primer", "kem lot", "base makeup")),
+        Map.entry("foundation", List.of("foundation", "kem nen", "cushion", "phan nuoc")),
+        Map.entry("concealer", List.of("concealer", "che khuyet diem", "kem che khuyet diem")),
+        Map.entry("powder", List.of("powder", "phan phu", "phan bot", "loose powder", "pressed powder")),
+        Map.entry("blush", List.of("blush", "ma hong")),
+        Map.entry("highlighter", List.of("highlighter", "phan bat sang", "tao khoi sang")),
+        Map.entry("contour", List.of("contour", "tao khoi", "phan tao khoi")),
+        Map.entry("eyeshadow", List.of("eyeshadow", "phan mat")),
+        Map.entry("eyeliner", List.of("eyeliner", "ke mat", "but ke mat")),
+        Map.entry("mascara", List.of("mascara", "mascara")),
+        Map.entry("eyebrow", List.of("eyebrow", "chi ke may", "bot ke may", "gel ke may", "ke chan may")),
+        Map.entry("lipstick", List.of("lipstick", "son moi", "son thoi", "son kem")),
+        Map.entry("lip_tint", List.of("lip tint", "son tint", "son nuoc")),
+        Map.entry("lip_gloss", List.of("lip gloss", "son bong")),
+        Map.entry("lip_liner", List.of("lip liner", "chi ke vien moi")),
+        Map.entry("setting_spray", List.of("setting spray", "xit khoa makeup", "xit co dinh makeup")),
+        Map.entry("nail_polish", List.of("nail polish", "son mong tay")),
+        Map.entry("perfume", List.of("perfume", "nuoc hoa", "eau de parfum", "eau de toilette", "cologne")),
+        Map.entry("deodorant", List.of("deodorant", "lan khu mui", "xit khu mui"))
     );
 
     private static final String OUT_OF_SCOPE_REPLY =
-        "Mình chỉ hỗ trợ các câu hỏi về mỹ phẩm, chăm sóc da và những vấn đề liên quan. " +
-        "Bạn vui lòng hỏi đúng chủ đề để mình giúp bạn tốt nhất nha!";
+            "Mình chỉ hỗ trợ các câu hỏi về mỹ phẩm, chăm sóc da và thành phần liên quan. "
+                    + "Bạn hãy hỏi đúng chủ đề để mình tư vấn tốt hơn nhé.";
 
     private static final String SAFETY_REPLY =
-        "Mình không thể khẳng định sản phẩm nào gây hại nếu thiếu nguồn xác minh chính thống. " +
-        "Nếu bạn lo lắng về độ an toàn, hãy kiểm tra bảng thành phần, thử trên vùng da nhỏ " +
-        "(patch test), sử dụng đúng hướng dẫn và tham khảo bác sĩ da liễu khi có dấu hiệu bất thường nhé.";
+            "Mình không thể khẳng định độ an toàn của sản phẩm nếu thiếu nguồn xác minh rõ ràng. "
+                    + "Bạn nên kiểm tra bảng thành phần, thử trước trên vùng da nhỏ và tham khảo bác sĩ da liễu nếu da đang nhạy cảm hoặc đang điều trị.";
 
-private static final String ADVICE_DISCLAIMER =
-    "\n\n Lưu ý: Đây chỉ là gợi ý tham khảo dựa trên thông tin sản phẩm và kinh nghiệm phổ biến. " +
-    "\n Trước khi sử dụng, bạn nên: " +
-    "\n ① Kiểm tra kỹ bảng thành phần và hướng dẫn từ nhà sản xuất; " +
-    "\n ② Thử sản phẩm lên một vùng da nhỏ (patch test) để tránh kích ứng; " +
-    "\n ③ Nếu có làn da nhạy cảm, đang điều trị da liễu hoặc cơ địa dị ứng, " +
-    "hãy tham khảo thêm ý kiến bác sĩ da liễu trước khi dùng. " +
-    "Thông tin từ chatbot không thay thế cho chẩn đoán hay chỉ định y khoa.";
+    private static final String ADVICE_DISCLAIMER =
+            "\n\nBạn có thể xem thêm bảng thành phần, cách sử dụng và thử trước trên một vùng da nhỏ để yên tâm hơn.";
+
+    private static final int DEFAULT_SUGGESTED_TOP_N = 3;
+    private static final int RECOMMENDATION_RETRIEVAL_TOP_K = 20;
 
     private final AiChatSessionRepository sessionRepository;
     private final AiChatMessageRepository messageRepository;
     private final AiRecommendationRepository recommendationRepository;
     private final ContextRetrievalService contextRetrievalService;
     private final PromptBuilder promptBuilder;
-    private final GeminiChatService geminiChatService;
+    private final OllamaChatService ollamaChatService;
     private final AiContextCacheService cacheService;
     private final AiRagProperties ragProperties;
     private final AiChatRetentionProperties retentionProperties;
@@ -232,7 +280,7 @@ private static final String ADVICE_DISCLAIMER =
             AiRecommendationRepository recommendationRepository,
             ContextRetrievalService contextRetrievalService,
             PromptBuilder promptBuilder,
-            GeminiChatService geminiChatService,
+            OllamaChatService ollamaChatService,
             AiContextCacheService cacheService,
             AiRagProperties ragProperties,
             AiChatRetentionProperties retentionProperties
@@ -242,7 +290,7 @@ private static final String ADVICE_DISCLAIMER =
         this.recommendationRepository = recommendationRepository;
         this.contextRetrievalService = contextRetrievalService;
         this.promptBuilder = promptBuilder;
-        this.geminiChatService = geminiChatService;
+        this.ollamaChatService = ollamaChatService;
         this.cacheService = cacheService;
         this.ragProperties = ragProperties;
         this.retentionProperties = retentionProperties;
@@ -264,46 +312,48 @@ private static final String ADVICE_DISCLAIMER =
 
         String guardReply = buildGuardReply(request.getMessage());
         if (guardReply != null) {
-            AiChatMessage assistantMessage = AiChatMessage.builder()
-                .sessionId(session.getId())
-                .customerId(request.getCustomerId())
-                .role(MessageRole.ASSISTANT)
-                .content(guardReply)
-                .tokenUsed(0)
-                .createdAt(Instant.now())
-                .expireAt(resolveExpireAt(Instant.now()))
-                .build();
-            messageRepository.save(assistantMessage);
-
-            session.setLastMessageAt(assistantMessage.getCreatedAt());
-            sessionRepository.save(session);
-
-            updateChatContextCache(session, List.of(), userMessage, assistantMessage);
-
-            return AiChatResponse.builder()
-                .sessionId(session.getId())
-                .reply(guardReply)
-                .suggestedProducts(List.of())
-                .build();
+            return saveGuardReply(session, request.getCustomerId(), userMessage, guardReply);
         }
 
-        List<ContextMessage> history = loadHistory(session.getId(), request.getCustomerId());
-        ContextRetrievalService.ContextSnapshot snapshot = contextRetrievalService.retrieveContext(
-                request.getCustomerId(),
-                request.getMessage(),
-                request.getTopK()
+        boolean recommendationIntent = isRecommendationIntent(request.getMessage());
+        int retrievalTopK = resolveRetrievalTopK(request.getTopK(), recommendationIntent);
+
+        CompletableFuture<List<ContextMessage>> historyFuture = CompletableFuture.supplyAsync(
+                () -> loadHistory(session.getId(), request.getCustomerId())
+        );
+        CompletableFuture<ContextRetrievalService.ContextSnapshot> snapshotFuture = CompletableFuture.supplyAsync(
+                () -> contextRetrievalService.retrieveContext(
+                        request.getCustomerId(),
+                        request.getMessage(),
+                        retrievalTopK
+                )
         );
 
-        String prompt = promptBuilder.buildPrompt(snapshot, history, request.getMessage());
-        GeminiClient.GeminiChatResult result = geminiChatService.generateReply(prompt);
+        List<ContextMessage> history = historyFuture.join();
+        ContextRetrievalService.ContextSnapshot snapshot = snapshotFuture.join();
 
-        String replyText = appendDisclaimer(result.text());
+        boolean shouldSuggestProducts = recommendationIntent || shouldSuggestProducts(request.getMessage(), snapshot.items());
+        List<CatalogSemanticSearchItem> selectedItems = shouldSuggestProducts
+                ? selectSuggestedItems(snapshot.items(), request.getMessage(), request.getTopK())
+                : List.of();
+
+        String replyText;
+        int tokenUsed = 0;
+        if (shouldSuggestProducts) {
+            replyText = buildRecommendationReply(request.getMessage(), selectedItems);
+        } else {
+            String prompt = promptBuilder.buildPrompt(snapshot, history, request.getMessage());
+            OllamaChatService.ChatResult result = ollamaChatService.generateReply(prompt);
+            tokenUsed = result.tokenUsed();
+            replyText = buildGeneralReply(result.text());
+        }
+
         AiChatMessage assistantMessage = AiChatMessage.builder()
                 .sessionId(session.getId())
                 .customerId(request.getCustomerId())
                 .role(MessageRole.ASSISTANT)
-            .content(replyText)
-                .tokenUsed(result.totalTokenCount())
+                .content(replyText)
+                .tokenUsed(tokenUsed)
                 .createdAt(Instant.now())
                 .expireAt(resolveExpireAt(Instant.now()))
                 .build();
@@ -312,15 +362,45 @@ private static final String ADVICE_DISCLAIMER =
         session.setLastMessageAt(assistantMessage.getCreatedAt());
         sessionRepository.save(session);
 
-        List<SuggestedProduct> suggestions = buildSuggestions(snapshot.items());
-        persistRecommendations(request.getCustomerId(), snapshot.items());
+        List<SuggestedProduct> suggestions = buildSuggestions(selectedItems);
+        if (shouldSuggestProducts && !selectedItems.isEmpty()) {
+            persistRecommendations(request.getCustomerId(), selectedItems);
+        }
 
         updateChatContextCache(session, history, userMessage, assistantMessage);
 
         return AiChatResponse.builder()
                 .sessionId(session.getId())
-            .reply(replyText)
+                .reply(replyText)
                 .suggestedProducts(suggestions)
+                .build();
+    }
+
+    private AiChatResponse saveGuardReply(
+            AiChatSession session,
+            String customerId,
+            AiChatMessage userMessage,
+            String guardReply
+    ) {
+        AiChatMessage assistantMessage = AiChatMessage.builder()
+                .sessionId(session.getId())
+                .customerId(customerId)
+                .role(MessageRole.ASSISTANT)
+                .content(guardReply)
+                .tokenUsed(0)
+                .createdAt(Instant.now())
+                .expireAt(resolveExpireAt(Instant.now()))
+                .build();
+        messageRepository.save(assistantMessage);
+
+        session.setLastMessageAt(assistantMessage.getCreatedAt());
+        sessionRepository.save(session);
+        updateChatContextCache(session, List.of(), userMessage, assistantMessage);
+
+        return AiChatResponse.builder()
+                .sessionId(session.getId())
+                .reply(guardReply)
+                .suggestedProducts(List.of())
                 .build();
     }
 
@@ -354,6 +434,7 @@ private static final String ADVICE_DISCLAIMER =
         if (cached.isPresent() && cached.get().getMessages() != null) {
             return new ArrayList<>(cached.get().getMessages());
         }
+
         List<AiChatMessage> messages = messageRepository.findBySessionIdAndCustomerIdOrderByCreatedAtAsc(
                 sessionId,
                 customerId,
@@ -385,6 +466,7 @@ private static final String ADVICE_DISCLAIMER =
         if (updated.size() > maxMessages) {
             updated = updated.subList(updated.size() - maxMessages, updated.size());
         }
+
         ChatContextCacheEntry entry = ChatContextCacheEntry.builder()
                 .sessionId(session.getId())
                 .customerId(session.getCustomerId())
@@ -399,14 +481,15 @@ private static final String ADVICE_DISCLAIMER =
             return List.of();
         }
         return items.stream()
-            .filter(Objects::nonNull)
-            .filter(item -> item.getProductId() != null)
-            .map(item -> SuggestedProduct.builder()
-                .productId(item.getProductId().toString())
-                .name(item.getName())
-                .score(item.getScore())
-                .build())
-            .collect(Collectors.toList());
+                .filter(Objects::nonNull)
+                .filter(item -> item.getProductId() != null)
+                .distinct()
+                .map(item -> SuggestedProduct.builder()
+                        .productId(item.getProductId().toString())
+                        .name(item.getName())
+                        .score(item.getScore())
+                        .build())
+                .collect(Collectors.toList());
     }
 
     private void persistRecommendations(String customerId, List<CatalogSemanticSearchItem> items) {
@@ -415,18 +498,18 @@ private static final String ADVICE_DISCLAIMER =
         }
         Instant now = Instant.now();
         List<AiRecommendation> recommendations = items.stream()
-            .filter(Objects::nonNull)
-            .filter(item -> item.getProductId() != null)
-            .map(item -> AiRecommendation.builder()
-                .customerId(customerId)
-                .productId(item.getProductId().toString())
-                .score(item.getScore())
-                .reason("chat_context")
-                .type(RecommendationType.SIMILAR)
-                .isClicked(false)
-                .createdAt(now)
-                .build())
-            .collect(Collectors.toList());
+                .filter(Objects::nonNull)
+                .filter(item -> item.getProductId() != null)
+                .map(item -> AiRecommendation.builder()
+                        .customerId(customerId)
+                        .productId(item.getProductId().toString())
+                        .score(item.getScore())
+                        .reason("chat_context")
+                        .type(RecommendationType.SIMILAR)
+                        .isClicked(false)
+                        .createdAt(now)
+                        .build())
+                .collect(Collectors.toList());
         recommendationRepository.saveAll(recommendations);
     }
 
@@ -435,25 +518,20 @@ private static final String ADVICE_DISCLAIMER =
     }
 
     private String buildGuardReply(String message) {
-        String text = message == null ? "" : message.trim();
+        String text = normalize(message);
         if (text.isBlank()) {
             return OUT_OF_SCOPE_REPLY;
         }
-        if (!isInDomain(text)) {
+        if (containsKeyword(text, HARD_BLOCK_KEYWORDS) && !containsKeyword(text, COSMETIC_CONTEXT_KEYWORDS)) {
             return OUT_OF_SCOPE_REPLY;
         }
-        if (isHarmQuery(text)) {
+        if (!isAllowedScope(text)) {
+            return OUT_OF_SCOPE_REPLY;
+        }
+        if (containsKeyword(text, SAFETY_SENSITIVE_KEYWORDS)) {
             return SAFETY_REPLY;
         }
         return null;
-    }
-
-    private boolean isInDomain(String text) {
-        return DOMAIN_PATTERN.matcher(text).find();
-    }
-
-    private boolean isHarmQuery(String text) {
-        return HARM_PATTERN.matcher(text).find();
     }
 
     private String appendDisclaimer(String reply) {
@@ -462,6 +540,512 @@ private static final String ADVICE_DISCLAIMER =
             return ADVICE_DISCLAIMER.trim();
         }
         return text + ADVICE_DISCLAIMER;
+    }
+
+    private List<CatalogSemanticSearchItem> selectSuggestedItems(
+            List<CatalogSemanticSearchItem> items,
+            String message,
+            Integer topKOverride
+    ) {
+        if (items == null || items.isEmpty()) {
+            return List.of();
+        }
+        String normalizedMessage = normalize(message);
+        String requestedBrand = extractRequestedBrand(normalizedMessage, items);
+        String requestedProductType = extractRequestedProductType(normalizedMessage, items);
+        int maxCount = resolveSuggestedCount(topKOverride);
+        return items.stream()
+                .filter(Objects::nonNull)
+                .filter(item -> item.getProductId() != null)
+                .filter(item -> item.getScore() != null && item.getScore() > 0)
+                .filter(item -> matchesIntent(item, normalizedMessage, requestedBrand, requestedProductType))
+                .sorted(suggestionComparator(normalizedMessage, requestedBrand, requestedProductType))
+                .collect(Collectors.toMap(
+                        CatalogSemanticSearchItem::getProductId,
+                        item -> item,
+                        (left, right) -> {
+                            Double leftScore = left.getScore();
+                            Double rightScore = right.getScore();
+                            if (leftScore == null) {
+                                return right;
+                            }
+                            if (rightScore == null) {
+                                return left;
+                            }
+                            return leftScore >= rightScore ? left : right;
+                        },
+                        LinkedHashMap::new
+                ))
+                .values()
+                .stream()
+                .sorted(suggestionComparator(normalizedMessage, requestedBrand, requestedProductType))
+                .limit(maxCount)
+                .collect(Collectors.toList());
+    }
+
+    private int resolveSuggestedCount(Integer topKOverride) {
+        if (topKOverride == null || topKOverride < 1) {
+            return DEFAULT_SUGGESTED_TOP_N;
+        }
+        return Math.min(topKOverride, DEFAULT_SUGGESTED_TOP_N);
+    }
+
+    private Comparator<CatalogSemanticSearchItem> suggestionComparator(
+            String normalizedMessage,
+            String requestedBrand,
+            String requestedProductType
+    ) {
+        return Comparator.comparingDouble(
+                (CatalogSemanticSearchItem item) -> scoreForSuggestion(item, normalizedMessage, requestedBrand, requestedProductType)
+        ).reversed();
+    }
+
+    private String buildRecommendationReply(String message, List<CatalogSemanticSearchItem> selectedItems) {
+        StringBuilder builder = new StringBuilder();
+        if (selectedItems != null && !selectedItems.isEmpty()) {
+            builder.append(buildRecommendationIntro(message, selectedItems)).append("\n");
+            int index = 1;
+            for (CatalogSemanticSearchItem item : selectedItems) {
+                if (item == null || item.getName() == null || item.getName().isBlank()) {
+                    continue;
+                }
+                builder.append(index).append(". ").append(item.getName().trim());
+                String reason = buildSuggestionReason(item);
+                if (!reason.isBlank()) {
+                    builder.append(" - ").append(reason);
+                }
+                builder.append("\n");
+                index++;
+            }
+            builder.append("\n");
+            builder.append(buildRecommendationExplanation(message, selectedItems));
+        } else {
+            builder.append(buildNoRecommendationReply(message));
+        }
+        return appendDisclaimer(builder.toString());
+    }
+
+    private String buildGeneralReply(String modelText) {
+        String explanation = modelText == null ? "" : modelText.trim();
+        if (!explanation.isBlank()) {
+            return appendDisclaimer(explanation);
+        }
+        return "Mình chưa có đủ thông tin để gợi ý thật sát. Bạn có thể nói rõ hơn về loại da, vấn đề da, mức giá hoặc thương hiệu bạn đang quan tâm không?" + ADVICE_DISCLAIMER;
+    }
+
+    private boolean shouldSuggestProducts(String message, List<CatalogSemanticSearchItem> items) {
+        String normalized = normalize(message);
+        return containsKeyword(normalized, PRODUCT_SUGGESTION_KEYWORDS)
+                || containsKeyword(normalized, BRAND_DISCOVERY_KEYWORDS)
+                || (!normalized.isBlank() && items != null && !items.isEmpty());
+    }
+
+    private boolean isRecommendationIntent(String message) {
+        String normalized = normalize(message);
+        return containsKeyword(normalized, PRODUCT_SUGGESTION_KEYWORDS)
+                || containsKeyword(normalized, BRAND_DISCOVERY_KEYWORDS)
+                || normalized.contains("mua")
+                || normalized.contains("tim")
+                || normalized.contains("chon");
+    }
+
+    private int resolveRetrievalTopK(Integer topKOverride, boolean recommendationIntent) {
+        int requested = topKOverride == null ? ragProperties.getTopK() : topKOverride;
+        int safeRequested = Math.max(1, requested);
+        if (!recommendationIntent) {
+            return safeRequested;
+        }
+        return Math.max(safeRequested, RECOMMENDATION_RETRIEVAL_TOP_K);
+    }
+
+    private boolean isAllowedScope(String text) {
+        return containsKeyword(text, DOMAIN_KEYWORDS)
+                || containsKeyword(text, COSMETIC_CONTEXT_KEYWORDS)
+                || containsKeyword(text, PRODUCT_SUGGESTION_KEYWORDS)
+                || containsKeyword(text, BRAND_DISCOVERY_KEYWORDS);
+    }
+
+    private boolean matchesIntent(
+            CatalogSemanticSearchItem item,
+            String message,
+            String requestedBrand,
+            String requestedProductType
+    ) {
+        return matchesBrand(item, requestedBrand)
+                && matchesProductType(item, requestedProductType)
+                && matchesPrice(item, message);
+    }
+
+    private boolean matchesBrand(CatalogSemanticSearchItem item, String requestedBrand) {
+        if (requestedBrand == null || requestedBrand.isBlank()) {
+            return true;
+        }
+        String brand = normalize(item.getBrandName());
+        if (brand.isBlank()) {
+            return true;
+        }
+        return brand.equals(requestedBrand);
+    }
+
+    private boolean matchesPrice(CatalogSemanticSearchItem item, String message) {
+        Integer targetPrice = extractTargetPriceInThousand(message);
+        if (targetPrice == null) {
+            return true;
+        }
+        BigDecimal min = item.getMinPrice();
+        BigDecimal max = item.getMaxPrice();
+        if (min == null && max == null) {
+            return true;
+        }
+        BigDecimal target = BigDecimal.valueOf(targetPrice.longValue() * 1000L);
+        BigDecimal lowerBound = target.multiply(BigDecimal.valueOf(0.7));
+        BigDecimal upperBound = target.multiply(BigDecimal.valueOf(1.3));
+        BigDecimal effectiveMin = min == null ? max : min;
+        BigDecimal effectiveMax = max == null ? min : max;
+        if (effectiveMin == null || effectiveMax == null) {
+            return true;
+        }
+        return effectiveMax.compareTo(lowerBound) >= 0 && effectiveMin.compareTo(upperBound) <= 0;
+    }
+
+    private Double scoreForSuggestion(
+            CatalogSemanticSearchItem item,
+            String message,
+            String requestedBrand,
+            String requestedProductType
+    ) {
+        double score = item.getScore() == null ? 0.0 : item.getScore();
+        if (matchesBrand(item, requestedBrand)) {
+            score += 2.5;
+        }
+        if (matchesProductType(item, requestedProductType)) {
+            score += 2.0;
+        }
+        Integer targetPrice = extractTargetPriceInThousand(message);
+        if (targetPrice != null) {
+            score += priceCloseness(item, targetPrice);
+        }
+        score += lexicalBoost(item, message);
+        return score;
+    }
+
+    private double lexicalBoost(CatalogSemanticSearchItem item, String message) {
+        Set<String> queryTokens = extractTokens(message);
+        if (queryTokens.isEmpty()) {
+            return 0;
+        }
+        double boost = 0;
+        boost += tokenOverlapScore(queryTokens, extractTokens(normalize(item.getName()))) * 1.4;
+        boost += tokenOverlapScore(queryTokens, extractTokens(normalize(item.getCategoryName()))) * 0.8;
+        boost += tokenOverlapScore(queryTokens, extractTokens(normalize(item.getBrandName()))) * 2.0;
+        
+        if (item.getSuitableSkinTypes() != null && !item.getSuitableSkinTypes().isEmpty()) {
+            boost += tokenOverlapScore(queryTokens, extractTokens(normalize(String.join(" ", item.getSuitableSkinTypes())))) * 2.5;
+        }
+        if (item.getSkinConcerns() != null && !item.getSkinConcerns().isEmpty()) {
+            boost += tokenOverlapScore(queryTokens, extractTokens(normalize(String.join(" ", item.getSkinConcerns())))) * 2.5;
+        }
+        
+        return boost;
+    }
+
+    private double tokenOverlapScore(Set<String> queryTokens, Set<String> fieldTokens) {
+        if (queryTokens.isEmpty() || fieldTokens.isEmpty()) {
+            return 0;
+        }
+        long matched = queryTokens.stream().filter(fieldTokens::contains).count();
+        return (double) matched / (double) queryTokens.size();
+    }
+
+    private String extractRequestedBrand(String message, List<CatalogSemanticSearchItem> items) {
+        if (message == null || message.isBlank() || items == null || items.isEmpty()) {
+            return null;
+        }
+        Set<String> queryTokens = extractTokens(message);
+        String bestBrand = null;
+        int bestScore = 0;
+        for (CatalogSemanticSearchItem item : items) {
+            String normalizedBrand = normalize(item.getBrandName());
+            if (normalizedBrand.isBlank()) {
+                continue;
+            }
+            Set<String> brandTokens = extractTokens(normalizedBrand);
+            int score = 0;
+            for (String token : queryTokens) {
+                if (brandTokens.contains(token) || normalizedBrand.contains(token)) {
+                    score++;
+                }
+            }
+            if (score > bestScore) {
+                bestScore = score;
+                bestBrand = normalizedBrand;
+            }
+        }
+        return bestScore > 0 ? bestBrand : null;
+    }
+
+    private String extractRequestedProductType(String message, List<CatalogSemanticSearchItem> items) {
+        if (message == null || message.isBlank()) {
+            return null;
+        }
+        String directType = extractCanonicalProductType(message);
+        if (directType != null) {
+            return directType;
+        }
+        Set<String> queryTokens = extractTokens(message);
+        Set<String> canonicalQueryTypes = expandCanonicalTypes(queryTokens);
+        if (items == null || items.isEmpty()) {
+            return null;
+        }
+        String bestType = null;
+        int bestScore = 0;
+        for (CatalogSemanticSearchItem item : items) {
+            Set<String> itemTokens = itemProductTypeTokens(item);
+            int score = 0;
+            for (String token : canonicalQueryTypes) {
+                if (itemTokens.contains(token)) {
+                    score++;
+                }
+            }
+            if (score > bestScore) {
+                bestScore = score;
+                bestType = itemTokens.stream().filter(PRODUCT_TYPE_ALIASES::containsKey).findFirst().orElse(null);
+            }
+        }
+        return bestType;
+    }
+
+    private boolean matchesProductType(CatalogSemanticSearchItem item, String requestedProductType) {
+        if (requestedProductType == null || requestedProductType.isBlank()) {
+            return true;
+        }
+        return itemProductTypeTokens(item).contains(requestedProductType);
+    }
+
+    private String extractCanonicalProductType(String message) {
+        String normalizedMessage = normalize(message);
+        String bestType = null;
+        int bestAliasLength = 0;
+        for (Map.Entry<String, List<String>> entry : PRODUCT_TYPE_ALIASES.entrySet()) {
+            for (String alias : entry.getValue()) {
+                if (!alias.isBlank() && normalizedMessage.contains(alias) && alias.length() > bestAliasLength) {
+                    bestType = entry.getKey();
+                    bestAliasLength = alias.length();
+                }
+            }
+        }
+        return bestType;
+    }
+
+    private Set<String> itemProductTypeTokens(CatalogSemanticSearchItem item) {
+        Set<String> itemTokens = new LinkedHashSet<>();
+        itemTokens.addAll(extractTokens(normalize(item.getCategoryName())));
+        itemTokens.addAll(extractTokens(normalize(item.getName())));
+        itemTokens.addAll(extractTokens(normalize(item.getDescription())));
+        itemTokens.addAll(expandCanonicalTypes(itemTokens));
+        for (Map.Entry<String, List<String>> entry : PRODUCT_TYPE_ALIASES.entrySet()) {
+            for (String alias : entry.getValue()) {
+                String normalizedAlias = normalize(alias);
+                if (normalize(item.getCategoryName()).contains(normalizedAlias)
+                        || normalize(item.getName()).contains(normalizedAlias)
+                        || normalize(item.getDescription()).contains(normalizedAlias)) {
+                    itemTokens.add(entry.getKey());
+                    break;
+                }
+            }
+        }
+        return itemTokens;
+    }
+
+    private Set<String> expandCanonicalTypes(Set<String> tokens) {
+        Set<String> expanded = new LinkedHashSet<>();
+        for (Map.Entry<String, List<String>> entry : PRODUCT_TYPE_ALIASES.entrySet()) {
+            if (tokens.contains(entry.getKey())) {
+                expanded.add(entry.getKey());
+                continue;
+            }
+            for (String alias : entry.getValue()) {
+                Set<String> aliasTokens = extractTokens(alias);
+                if (!aliasTokens.isEmpty() && tokens.containsAll(aliasTokens)) {
+                    expanded.add(entry.getKey());
+                    break;
+                }
+            }
+        }
+        return expanded;
+    }
+
+    private double priceCloseness(CatalogSemanticSearchItem item, int targetPriceInThousand) {
+        BigDecimal min = item.getMinPrice();
+        BigDecimal max = item.getMaxPrice();
+        if (min == null && max == null) {
+            return 0;
+        }
+        BigDecimal effectiveMin = min == null ? max : min;
+        BigDecimal effectiveMax = max == null ? min : max;
+        if (effectiveMin == null || effectiveMax == null) {
+            return 0;
+        }
+        BigDecimal avg = effectiveMin.add(effectiveMax).divide(BigDecimal.valueOf(2), java.math.RoundingMode.HALF_UP);
+        double target = targetPriceInThousand * 1000.0;
+        double distance = Math.abs(avg.doubleValue() - target);
+        return Math.max(0, 0.8 - (distance / Math.max(target, 1.0)));
+    }
+
+    private Integer extractTargetPriceInThousand(String message) {
+        if (message == null || message.isBlank() || !message.contains("gia")) {
+            return null;
+        }
+        java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("(\\d+[\\.,]?\\d*)\\s*(k|nghin|ngan|tr|trieu)?").matcher(message);
+        while (matcher.find()) {
+            String rawNumber = matcher.group(1);
+            String unit = matcher.group(2);
+            if (rawNumber == null || rawNumber.isBlank()) {
+                continue;
+            }
+            double value = Double.parseDouble(rawNumber.replace(",", "."));
+            if (unit == null || unit.isBlank() || unit.equals("k") || unit.equals("nghin") || unit.equals("ngan")) {
+                return (int) Math.round(value);
+            }
+            if (unit.equals("tr") || unit.equals("trieu")) {
+                return (int) Math.round(value * 1000);
+            }
+        }
+        return null;
+    }
+
+    private Set<String> extractTokens(String message) {
+        if (message == null || message.isBlank()) {
+            return Set.of();
+        }
+        return java.util.Arrays.stream(message.split("[^a-z0-9]+"))
+                .map(String::trim)
+                .filter(token -> token.length() >= 2)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+    }
+
+    private String buildRecommendationExplanation(String message, List<CatalogSemanticSearchItem> items) {
+        List<String> reasons = new ArrayList<>();
+        String normalized = normalize(message);
+        if (containsKeyword(normalized, BRAND_DISCOVERY_KEYWORDS)) {
+            String brand = items.stream()
+                    .map(CatalogSemanticSearchItem::getBrandName)
+                    .filter(Objects::nonNull)
+                    .filter(value -> !value.isBlank())
+                    .findFirst()
+                    .orElse(null);
+            if (brand != null) {
+                reasons.add("Mình ưu tiên các sản phẩm của " + brand + " để danh sách bám sát hơn với điều bạn đang tìm.");
+            }
+        }
+        Integer targetPrice = extractTargetPriceInThousand(normalized);
+        if (targetPrice != null) {
+            reasons.add("Mình cũng canh theo tầm giá khoảng " + targetPrice + "k để bạn dễ chọn hơn.");
+        }
+        if (reasons.isEmpty()) {
+            return "Nếu bạn muốn, mình có thể lọc tiếp theo loại da, vấn đề da hoặc mức giá cụ thể hơn.";
+        }
+        return String.join(" ", reasons);
+    }
+
+    private String buildNoRecommendationReply(String message) {
+        Integer targetPrice = extractTargetPriceInThousand(normalize(message));
+        if (targetPrice != null) {
+            return "Mình chưa tìm được sản phẩm thật sự sát với tầm giá bạn muốn trong kho dữ liệu hiện tại. Bạn có thể nới ngân sách thêm một chút, hoặc nói rõ hơn về loại sản phẩm, loại da hay thương hiệu để mình gợi ý đúng hơn.";
+        }
+        return "Mình chưa tìm được gợi ý thật sự ăn khớp từ kho dữ liệu hiện tại. Bạn thử nói rõ hơn về thương hiệu, loại sản phẩm, vấn đề da hoặc mức giá để mình chọn lại sát nhu cầu hơn nhé.";
+    }
+
+    private String buildSuggestionReason(CatalogSemanticSearchItem item) {
+        List<String> reasons = new ArrayList<>();
+        if (item.getCategoryName() != null && !item.getCategoryName().isBlank()) {
+            reasons.add("thuộc nhóm " + item.getCategoryName().trim());
+        }
+        if (item.getBrandName() != null && !item.getBrandName().isBlank()) {
+            reasons.add("đến từ thương hiệu " + item.getBrandName().trim());
+        }
+        if (item.getSkinConcerns() != null && !item.getSkinConcerns().isEmpty()) {
+            reasons.add("nổi bật ở khả năng hỗ trợ " + String.join(", ", item.getSkinConcerns()));
+        }
+        if (item.getSuitableSkinTypes() != null && !item.getSuitableSkinTypes().isEmpty()) {
+            reasons.add("hợp với " + String.join(", ", item.getSuitableSkinTypes()));
+        }
+        return String.join(", ", reasons);
+    }
+
+    private String buildRecommendationIntro(String message, List<CatalogSemanticSearchItem> items) {
+        String normalized = normalize(message);
+        String productType = extractRequestedProductType(normalized, items);
+        Integer targetPrice = extractTargetPriceInThousand(normalized);
+        String brand = items.stream()
+                .map(CatalogSemanticSearchItem::getBrandName)
+                .filter(Objects::nonNull)
+                .filter(value -> !value.isBlank())
+                .findFirst()
+                .orElse(null);
+
+        List<String> details = new ArrayList<>();
+        if (productType != null && !productType.isBlank()) {
+            details.add(toVietnameseProductType(productType));
+        }
+        if (brand != null && containsKeyword(normalized, BRAND_DISCOVERY_KEYWORDS)) {
+            details.add("của " + brand);
+        }
+        if (targetPrice != null) {
+            details.add("tầm " + targetPrice + "k");
+        }
+
+        if (details.isEmpty()) {
+            return "Mình chọn ra vài sản phẩm khá hợp để bạn tham khảo:";
+        }
+        return "Mình đã chọn ra vài gợi ý " + String.join(" ", details) + " để bạn dễ tham khảo:";
+    }
+
+    private String toVietnameseProductType(String productType) {
+        return switch (productType) {
+            case "sunscreen" -> "kem chống nắng";
+            case "cleanser" -> "sữa rửa mặt";
+            case "moisturizer" -> "kem dưỡng";
+            case "mask" -> "mặt nạ";
+            case "shampoo" -> "dầu gội";
+            case "toner" -> "toner";
+            case "serum" -> "serum";
+            case "gel" -> "gel";
+            case "cream" -> "kem";
+            case "makeup" -> "sản phẩm trang điểm";
+            case "makeup_remover" -> "tẩy trang";
+            case "exfoliator" -> "tẩy tế bào chết";
+            case "treatment" -> "sản phẩm đặc trị";
+            case "bodycare" -> "sản phẩm chăm sóc cơ thể";
+            default -> productType;
+        };
+    }
+    private boolean containsKeyword(String text, Set<String> keywords) {
+        if (text == null || text.isBlank()) {
+            return false;
+        }
+        for (String keyword : keywords) {
+            if (text.contains(keyword)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private String normalize(String text) {
+        if (text == null) {
+            return "";
+        }
+        String normalized = Normalizer.normalize(text, Normalizer.Form.NFD)
+                .replaceAll("\\p{M}+", "")
+                .replace('\u0111', 'd')
+                .replace('\u0110', 'D')
+                .toLowerCase(Locale.ROOT)
+                .trim();
+        String result = normalized.replaceAll("\\s+", " ");
+        result = result.replace("cevare", "cerave");
+        result = result.replace("inisfree", "innisfree");
+        return result;
     }
 
     private Instant resolveExpireAt(Instant createdAt) {
@@ -475,3 +1059,5 @@ private static final String ADVICE_DISCLAIMER =
         return createdAt.plus(ttl);
     }
 }
+
+
