@@ -46,11 +46,12 @@ auth:
     secret: ${AUTH_JWT_SECRET}
 
 ai:
-  gemini:
-    api-key: ${GEMINI_API_KEY}
-    model: ${GEMINI_MODEL}
-    embedding-model: ${GEMINI_EMBEDDING_MODEL:text-embedding-004}
-    endpoint: ${GEMINI_API_ENDPOINT:https://generativelanguage.googleapis.com/v1beta/models}
+  embedding:
+    vector-dimension: ${AI_EMBEDDING_VECTOR_DIMENSION:768}
+    ollama:
+      base-url: ${AI_EMBEDDING_OLLAMA_BASE_URL:http://localhost:11434}
+      model: ${AI_EMBEDDING_OLLAMA_MODEL:nomic-embed-text}
+      timeout: ${AI_EMBEDDING_OLLAMA_TIMEOUT:30s}
   rag:
     top-k: ${AI_RAG_TOP_K:5}
     max-context-tokens: ${AI_RAG_MAX_CONTEXT_TOKENS:2048}
@@ -89,7 +90,7 @@ ai:
     cleanup-retention-days: ${AI_RECOMMENDATION_CLEANUP_RETENTION_DAYS:1}
   ollama:
     base-url: ${AI_OLLAMA_BASE_URL:http://localhost:11434}
-    model: ${AI_OLLAMA_MODEL:llama3}
+    model: ${AI_OLLAMA_MODEL:llama3.2:1b}
     timeout: ${AI_OLLAMA_TIMEOUT:30s}
   clients:
     internal-header-name: ${AI_INTERNAL_HEADER_NAME:X-Internal-Api-Key}
@@ -98,7 +99,7 @@ ai:
 resilience4j:
   circuitbreaker:
     instances:
-      gemini:
+      ollama:
         slidingWindowType: COUNT_BASED
         slidingWindowSize: 10
         failureRateThreshold: 50
@@ -106,5 +107,5 @@ resilience4j:
         permittedNumberOfCallsInHalfOpenState: 3
   timelimiter:
     instances:
-      gemini:
+      ollama:
         timeoutDuration: 60s

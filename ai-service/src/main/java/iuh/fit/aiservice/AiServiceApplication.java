@@ -3,7 +3,7 @@ package iuh.fit.aiservice;
 import iuh.fit.aiservice.config.AiCacheProperties;
 import iuh.fit.aiservice.config.AiChatRetentionProperties;
 import iuh.fit.aiservice.config.AiClientProperties;
-import iuh.fit.aiservice.config.AiGeminiProperties;
+import iuh.fit.aiservice.config.AiEmbeddingProperties;
 import iuh.fit.aiservice.config.AiRagProperties;
 import iuh.fit.aiservice.config.AiRetryProperties;
 import iuh.fit.aiservice.recommendation.config.OllamaProperties;
@@ -22,7 +22,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 @EnableMongoRepositories(basePackages = "iuh.fit.aiservice.repo")
 @EnableScheduling
 @EnableConfigurationProperties({
-        AiGeminiProperties.class,
+        AiEmbeddingProperties.class,
         AiRagProperties.class,
         AiRetryProperties.class,
         AiCacheProperties.class,

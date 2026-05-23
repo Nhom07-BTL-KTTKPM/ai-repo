@@ -17,8 +17,11 @@ public class CatalogSemanticSearchItem {
 
     private UUID productId;
     private String name;
+    private String description;
     private String ingredients;
     private String usageInstructions;
+    private String categoryName;
+    private String brandName;
     private List<String> suitableSkinTypes;
     private List<String> skinConcerns;
     private BigDecimal minPrice;

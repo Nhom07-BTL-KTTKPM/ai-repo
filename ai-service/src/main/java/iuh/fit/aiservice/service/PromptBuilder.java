@@ -22,9 +22,12 @@ public class PromptBuilder {
         builder.append("- Only use the provided context.\n");
         builder.append("- Only answer questions about cosmetics, skincare, ingredients, usage, routines, and common side effects.\n");
         builder.append("- If the question is outside this scope, refuse briefly and ask for a skincare-related question.\n");
-        builder.append("- If context is insufficient, say what is missing.\n\n");
-        builder.append("- Do not recommend or name specific products.\n");
-        builder.append("- Do not mention product IDs.\n\n");
+        builder.append("- If context is insufficient, say what is missing.\n");
+        builder.append("- You may mention products from the provided context when relevant.\n");
+        builder.append("- Do not mention product IDs.\n");
+        builder.append("- When recommending products, explain the match using skin concerns, skin type, ingredients, category, brand, and usage instructions if available.\n");
+        builder.append("- If no relevant product is available, still answer with practical skincare guidance and say that product suggestions are currently limited.\n");
+        builder.append("- Prefer concise, practical Vietnamese.\n\n");
 
         builder.append("Context:\n");
         appendProfile(builder, snapshot.profile());
@@ -34,7 +37,7 @@ public class PromptBuilder {
 
         builder.append("\nUser question:\n");
         builder.append(userMessage == null ? "" : userMessage.trim());
-        builder.append("\n\nAnswer in Vietnamese. Do not invent facts.");
+        builder.append("\n\nAnswer in Vietnamese. Do not invent facts. If recommending products, explain why they match.");
         return builder.toString();
     }
 
@@ -72,9 +75,13 @@ public class PromptBuilder {
             return;
         }
         for (CatalogSemanticSearchItem item : items) {
-            builder.append("- id: ").append(item.getProductId())
-                    .append(", name: ").append(nullSafe(item.getName()))
+            builder.append("- name: ").append(nullSafe(item.getName()))
+                    .append(", category: ").append(nullSafe(item.getCategoryName()))
+                    .append(", brand: ").append(nullSafe(item.getBrandName()))
                     .append(", score: ").append(item.getScore())
+                    .append(", description: ").append(nullSafe(item.getDescription()))
+                    .append(", ingredients: ").append(nullSafe(item.getIngredients()))
+                    .append(", usageInstructions: ").append(nullSafe(item.getUsageInstructions()))
                     .append(", skinConcerns: ").append(item.getSkinConcerns())
                     .append(", suitableSkinTypes: ").append(item.getSuitableSkinTypes())
                     .append(", priceRange: ").append(item.getMinPrice()).append("-").append(item.getMaxPrice())

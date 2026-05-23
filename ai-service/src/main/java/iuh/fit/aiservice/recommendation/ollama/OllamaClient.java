@@ -22,7 +22,7 @@ public class OllamaClient {
     }
 
     public String generate(String prompt) {
-        String url = normalizeBaseUrl(properties.getBaseUrl()) + "/api/generate";
+        String url = buildGenerateUrl(properties.getBaseUrl());
         OllamaGenerateRequest request = OllamaGenerateRequest.builder()
                 .model(properties.getModel())
                 .prompt(prompt)
@@ -44,10 +44,31 @@ public class OllamaClient {
         return text.trim();
     }
 
+    private String buildGenerateUrl(String baseUrl) {
+        String normalized = normalizeBaseUrl(baseUrl);
+        if (normalized.endsWith("/api/generate")) {
+            return normalized;
+        }
+        if (normalized.endsWith("/api")) {
+            return normalized + "/generate";
+        }
+        return normalized + "/api/generate";
+    }
+
     private String normalizeBaseUrl(String baseUrl) {
         if (baseUrl == null || baseUrl.isBlank()) {
             return "http://localhost:11434";
         }
-        return baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl;
+        String trimmed = baseUrl.trim();
+        if (trimmed.endsWith("/")) {
+            trimmed = trimmed.substring(0, trimmed.length() - 1);
+        }
+        if (trimmed.endsWith("/api")) {
+            trimmed = trimmed.substring(0, trimmed.length() - 4);
+        }
+        if (trimmed.endsWith("/v1")) {
+            trimmed = trimmed.substring(0, trimmed.length() - 3);
+        }
+        return trimmed;
     }
 }
