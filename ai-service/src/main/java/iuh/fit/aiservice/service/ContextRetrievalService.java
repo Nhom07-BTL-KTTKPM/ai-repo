@@ -17,7 +17,6 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 
 import java.nio.charset.StandardCharsets;
-import java.text.Normalizer;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
@@ -26,11 +25,10 @@ import java.util.Collections;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
-import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
+
 @Service
 public class ContextRetrievalService {
 
@@ -38,66 +36,9 @@ public class ContextRetrievalService {
     private static final int VECTOR_CANDIDATE_MULTIPLIER = 4;
     private static final int MIN_VECTOR_CANDIDATES = 20;
     private static final int MAX_VECTOR_CANDIDATES = 50;
-    private static final double DEFAULT_MIN_SCORE = 0.30;
+    private static final double DEFAULT_MIN_SCORE = 0.18;
     private static final double BROAD_QUERY_MIN_SCORE = 0.12;
     private static final double FOCUSED_QUERY_MIN_SCORE = 0.18;
-    private static final Map<String, List<String>> PRODUCT_TYPE_ALIASES = Map.ofEntries(
-        // Các mục gốc
-        Map.entry("serum", List.of("serum", "tinh chat", "essence", "ampoule", "concentrate")),
-        Map.entry("sunscreen", List.of("sunscreen", "sunblock", "kem chong nang", "chong nang")),
-        Map.entry("cleanser", List.of("cleanser", "face wash", "foam cleanser", "sua rua mat", "rua mat")),
-        Map.entry("moisturizer", List.of("moisturizer", "hydrating cream", "kem duong", "duong am")),
-        Map.entry("toner", List.of("toner", "balancing toner", "nuoc can bang")),
-        Map.entry("mask", List.of("mask", "mat na")),
-        Map.entry("shampoo", List.of("shampoo", "dau goi", "goi dau", "toc", "cham soc toc", "hair", "haircare")),
-        Map.entry("gel", List.of("gel")),
-        Map.entry("cream", List.of("cream", "kem")),
-        Map.entry("makeup_remover", List.of("makeup remover", "tay trang", "nuoc tay trang", "dau tay trang", "sap tay trang", "micellar water")),
-        Map.entry("exfoliator", List.of("exfoliator", "tay te bao chet", "tay da chet", "bha", "aha", "pha", "peel")),
-        Map.entry("treatment", List.of("treatment", "dac tri", "cham mun", "tri mun", "retinol", "tretinoin")),
-        Map.entry("bodycare", List.of("bodycare", "sua tam", "kem tuyet", "duong the", "body lotion", "body wash")),
-        Map.entry("makeup", List.of("makeup", "trang diem")),
-
-        // Mở rộng
-        Map.entry("hair_conditioner", List.of("conditioner", "dau xa", "xa toc", "kem xa")),
-        Map.entry("hair_mask", List.of("hair mask", "kem u toc", "mat na toc")),
-        Map.entry("hair_oil", List.of("hair oil", "dau duong toc", "serum toc")),
-        Map.entry("scalp_treatment", List.of("scalp treatment", "dieu tri da dau", "cham soc da dau")),
-        Map.entry("body_lotion", List.of("body lotion", "sua duong the", "kem duong the", "body cream")),
-        Map.entry("hand_cream", List.of("hand cream", "kem duong tay")),
-        Map.entry("foot_cream", List.of("foot cream", "kem duong chan")),
-        Map.entry("lip_balm", List.of("lip balm", "son duong", "duong moi")),
-        Map.entry("eye_cream", List.of("eye cream", "kem mat", "duong mat")),
-        Map.entry("face_oil", List.of("face oil", "dau duong mat", "facial oil")),
-        Map.entry("mist", List.of("mist", "xit khoang", "facial mist", "setting spray")),
-        Map.entry("ampoule", List.of("ampoule", "ampule")),
-        Map.entry("essence", List.of("essence", "nuoc than", "first essence")),
-        Map.entry("emulsion", List.of("emulsion", "nhu tuong")),
-        Map.entry("sheet_mask", List.of("sheet mask", "mat na giay")),
-        Map.entry("sleeping_mask", List.of("sleeping mask", "mat na ngu")),
-        Map.entry("wash_off_mask", List.of("wash off mask", "mat na rua", "mat na dat set")),
-        Map.entry("sunscreen_stick", List.of("sunscreen stick", "son chong nang", "chong nang dang thoi")),
-        Map.entry("sun_cushion", List.of("sun cushion", "cushion chong nang")),
-        Map.entry("primer", List.of("primer", "kem lot", "base makeup")),
-        Map.entry("foundation", List.of("foundation", "kem nen", "cushion", "phan nuoc")),
-        Map.entry("concealer", List.of("concealer", "che khuyet diem", "kem che khuyet diem")),
-        Map.entry("powder", List.of("powder", "phan phu", "phan bot", "loose powder", "pressed powder")),
-        Map.entry("blush", List.of("blush", "ma hong")),
-        Map.entry("highlighter", List.of("highlighter", "phan bat sang", "tao khoi sang")),
-        Map.entry("contour", List.of("contour", "tao khoi", "phan tao khoi")),
-        Map.entry("eyeshadow", List.of("eyeshadow", "phan mat")),
-        Map.entry("eyeliner", List.of("eyeliner", "ke mat", "but ke mat")),
-        Map.entry("mascara", List.of("mascara", "mascara")),
-        Map.entry("eyebrow", List.of("eyebrow", "chi ke may", "bot ke may", "gel ke may", "ke chan may")),
-        Map.entry("lipstick", List.of("lipstick", "son moi", "son thoi", "son kem")),
-        Map.entry("lip_tint", List.of("lip tint", "son tint", "son nuoc")),
-        Map.entry("lip_gloss", List.of("lip gloss", "son bong")),
-        Map.entry("lip_liner", List.of("lip liner", "chi ke vien moi")),
-        Map.entry("setting_spray", List.of("setting spray", "xit khoa makeup", "xit co dinh makeup")),
-        Map.entry("nail_polish", List.of("nail polish", "son mong tay")),
-        Map.entry("perfume", List.of("perfume", "nuoc hoa", "eau de parfum", "eau de toilette", "cologne")),
-        Map.entry("deodorant", List.of("deodorant", "lan khu mui", "xit khu mui"))
-    );
 
     private final CatalogServiceClient catalogServiceClient;
     private final UserServiceClient userServiceClient;
@@ -122,7 +63,12 @@ public class ContextRetrievalService {
         this.ragProperties = ragProperties;
     }
 
-    public ContextSnapshot retrieveContext(String customerId, String query, Integer topKOverride) {
+
+    public ContextSnapshot retrieveContext(
+            String customerId,
+            String query,
+            Integer topKOverride
+    ) {
         int topK = topKOverride == null ? ragProperties.getTopK() : topKOverride;
         CompletableFuture<CustomerProfileResponse> profileFuture = CompletableFuture.supplyAsync(
                 () -> loadProfile(customerId)
@@ -173,7 +119,7 @@ public class ContextRetrievalService {
             return cachedEntry.get().getItems();
         }
 
-        List<CatalogSemanticSearchItem> items = runVectorRetrieval(customerId, query, topK, retrievalSpecs);
+        List<CatalogSemanticSearchItem> items = runVectorRetrieval(customerId, topK, retrievalSpecs);
 
         List<String> productIds = items.stream()
                 .map(item -> item.getProductId() == null ? null : item.getProductId().toString())
@@ -219,7 +165,7 @@ public class ContextRetrievalService {
                 if (builder.length() > 0) {
                     builder.append(". ");
                 }
-                builder.append("Phù hợp cho khách hàng: ");
+                builder.append("Phu hop cho khach hang: ");
                 if (hasSkinType) {
                     builder.append("da ").append(profile.getSkinType().trim().toLowerCase());
                 }
@@ -232,48 +178,30 @@ public class ContextRetrievalService {
                             .map(String::trim)
                             .map(String::toLowerCase)
                             .collect(Collectors.joining(", "));
-                    builder.append("đang gặp vấn đề ").append(concerns);
+                    builder.append("dang gap van de ").append(concerns);
                 }
             }
         }
         return builder.toString().trim();
     }
 
-    private List<QueryVectorSpec> buildRetrievalSpecs(String query, CustomerProfileResponse profile) {
+    private List<QueryVectorSpec> buildRetrievalSpecs(
+            String query,
+            CustomerProfileResponse profile
+    ) {
         String baseText = buildRetrievalText(query, profile);
         if (baseText.isBlank()) {
             return List.of();
         }
 
         List<QueryVectorSpec> specs = new ArrayList<>();
-        specs.add(new QueryVectorSpec(baseText, 1.0, DEFAULT_MIN_SCORE));
-
-        String normalizedQuery = normalize(query);
-        String brandHint = extractBrandHint(normalizedQuery);
-        if (brandHint != null && !brandHint.isBlank()) {
-            specs.add(new QueryVectorSpec(
-                    "Sản phẩm thuộc thương hiệu " + brandHint + ". " + baseText,
-                    0.92,
-                    FOCUSED_QUERY_MIN_SCORE
-            ));
-        }
-
-        String productType = extractProductTypeHint(normalizedQuery);
-        if (productType != null && !productType.isBlank()) {
-            List<String> aliases = PRODUCT_TYPE_ALIASES.getOrDefault(productType, List.of(productType));
-            specs.add(new QueryVectorSpec(
-                    "Loại sản phẩm: " + String.join(", ", aliases) + ". " + baseText,
-                    0.90,
-                    BROAD_QUERY_MIN_SCORE
-            ));
-        }
+        specs.add(new QueryVectorSpec(baseText, baseText, 1.0, DEFAULT_MIN_SCORE));
 
         return specs;
     }
 
     private List<CatalogSemanticSearchItem> runVectorRetrieval(
             String customerId,
-            String query,
             int topK,
             List<QueryVectorSpec> retrievalSpecs
     ) {
@@ -289,7 +217,7 @@ public class ContextRetrievalService {
             try {
                 embedding = queryEmbeddingClient.embed(spec.text());
             } catch (Exception ex) {
-                logger.warn("Failed to generate embedding for customer {} and query [{}]", customerId, query, ex);
+                logger.warn("Failed to generate embedding for customer {} and query [{}]", customerId, spec.text(), ex);
                 continue;
             }
             if (embedding == null || embedding.isEmpty()) {
@@ -300,13 +228,14 @@ public class ContextRetrievalService {
                     .embedding(embedding)
                     .topK(candidateTopK)
                     .minScore(spec.minScore())
-                    .queryText(query)
+                    .queryText(spec.queryText())
                     .build();
+
             CatalogSemanticSearchResponse response;
             try {
                 response = catalogServiceClient.semanticSearch(request);
             } catch (Exception ex) {
-                logger.warn("Failed semantic search in catalog-service for customer {} and query [{}]", customerId, query, ex);
+                logger.warn("Failed semantic search in catalog-service for customer {} and hint [{}]", customerId, spec.queryText(), ex);
                 continue;
             }
 
@@ -390,57 +319,6 @@ public class ContextRetrievalService {
         }
     }
 
-    private String normalize(String text) {
-        if (text == null) {
-            return "";
-        }
-        String normalized = Normalizer.normalize(text, Normalizer.Form.NFD)
-                .replaceAll("\\p{M}+", "")
-                .replace('\u0111', 'd')
-                .replace('\u0110', 'D')
-                .toLowerCase(Locale.ROOT)
-                .trim();
-        String result = normalized.replaceAll("\\s+", " ");
-        result = result.replace("cevare", "cerave");
-        result = result.replace("inisfree", "innisfree");
-        return result;
-    }
-
-    private String extractBrandHint(String normalizedQuery) {
-        if (normalizedQuery == null || normalizedQuery.isBlank()) {
-            return null;
-        }
-        List<String> tokens = List.of(normalizedQuery.split("\\s+"));
-        int brandMarkerIndex = -1;
-        for (int i = 0; i < tokens.size(); i++) {
-            String token = tokens.get(i);
-            if (token.equals("hang") || token.equals("brand") || token.equals("thuong") || token.equals("hieu") || token.equals("cua")) {
-                brandMarkerIndex = i;
-            }
-        }
-        if (brandMarkerIndex >= 0 && brandMarkerIndex + 1 < tokens.size()) {
-            return tokens.get(brandMarkerIndex + 1);
-        }
-        return null;
-    }
-
-    private String extractProductTypeHint(String normalizedQuery) {
-        if (normalizedQuery == null || normalizedQuery.isBlank()) {
-            return null;
-        }
-        String bestType = null;
-        int bestAliasLength = 0;
-        for (Map.Entry<String, List<String>> entry : PRODUCT_TYPE_ALIASES.entrySet()) {
-            for (String alias : entry.getValue()) {
-                if (!alias.isBlank() && normalizedQuery.contains(alias) && alias.length() > bestAliasLength) {
-                    bestType = entry.getKey();
-                    bestAliasLength = alias.length();
-                }
-            }
-        }
-        return bestType;
-    }
-
     public record ContextSnapshot(
             CustomerProfileResponse profile,
             List<ProductViewLog> viewLogs,
@@ -448,6 +326,6 @@ public class ContextRetrievalService {
     ) {
     }
 
-    private record QueryVectorSpec(String text, double weight, double minScore) {
+    private record QueryVectorSpec(String text, String queryText, double weight, double minScore) {
     }
 }
