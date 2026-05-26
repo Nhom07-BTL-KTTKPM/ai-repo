@@ -22,11 +22,23 @@ public class OllamaClient {
     }
 
     public String generate(String prompt) {
+        return generate(prompt, null);
+    }
+
+    public String generate(String prompt, String format) {
         String url = buildGenerateUrl(properties.getBaseUrl());
+        String modelName = properties.getModel();
+        
         OllamaGenerateRequest request = OllamaGenerateRequest.builder()
-                .model(properties.getModel())
+                .model(modelName)
                 .prompt(prompt)
                 .stream(false)
+                .format(format)
+                .think(false)
+                .options(java.util.Map.of(
+                        "num_predict", 1024,
+                        "num_ctx", 4096
+                ))
                 .build();
 
         Duration timeout = properties.getTimeout();

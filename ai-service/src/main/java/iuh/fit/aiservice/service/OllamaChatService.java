@@ -31,21 +31,25 @@ public class OllamaChatService {
     }
 
     public ChatResult generateReply(String prompt) {
+        return generateReply(prompt, null);
+    }
+
+    public ChatResult generateReply(String prompt, String format) {
         CircuitBreaker circuitBreaker = circuitBreakerFactory.create("ollama");
         return circuitBreaker.run(
-                () -> retryGenerate(prompt),
+                () -> retryGenerate(prompt, format),
                 this::fallbackResult
         );
     }
 
-    private ChatResult retryGenerate(String prompt) {
+    private ChatResult retryGenerate(String prompt, String format) {
         int maxAttempts = Math.max(1, retryProperties.getMaxAttempts());
         Duration backoff = retryProperties.getBackoff().getInitial();
         Duration maxBackoff = retryProperties.getBackoff().getMax();
         for (int attempt = 1; attempt <= maxAttempts; attempt++) {
             try {
-                String response = ollamaClient.generate(prompt);
-                return new ChatResult(response == null ? "" : response, 0);
+                String response = ollamaClient.generate(prompt, format);
+                return new ChatResult(response == null ? "" : response, 0, false);
             } catch (Exception ex) {
                 if (attempt >= maxAttempts) {
                     throw ex;
@@ -54,7 +58,7 @@ public class OllamaChatService {
                 backoff = nextBackoff(backoff, maxBackoff);
             }
         }
-        return fallbackResult(null);
+        return new ChatResult("", 0, true);
     }
 
     private void sleep(Duration backoff) {
@@ -81,9 +85,9 @@ public class OllamaChatService {
 
     private ChatResult fallbackResult(Throwable throwable) {
         logger.warn("Ollama fallback triggered", throwable);
-        return new ChatResult(FALLBACK_MESSAGE, 0);
+        return new ChatResult(FALLBACK_MESSAGE, 0, true);
     }
 
-    public record ChatResult(String text, int tokenUsed) {
+    public record ChatResult(String text, int tokenUsed, boolean fallback) {
     }
 }

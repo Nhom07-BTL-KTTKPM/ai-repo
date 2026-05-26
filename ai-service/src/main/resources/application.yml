@@ -5,7 +5,7 @@ spring:
     name: ai-service
   mvc:
     async:
-      request-timeout: 60s
+      request-timeout: 180s
   mongodb:
     uri: mongodb://${SPRING_DATA_MONGODB_USERNAME:root}:${SPRING_DATA_MONGODB_PASSWORD:root}@${SPRING_DATA_MONGODB_HOST:localhost}:${SPRING_DATA_MONGODB_PORT:27017}/${SPRING_DATA_MONGODB_DATABASE:ai_db}?authSource=${SPRING_DATA_MONGODB_AUTH_DB:admin}
   datasource:
@@ -58,7 +58,7 @@ ai:
     max-view-logs: ${AI_RAG_MAX_VIEW_LOGS:5}
     max-messages: ${AI_RAG_MAX_MESSAGES:10}
   retry:
-    max-attempts: ${AI_RETRY_MAX_ATTEMPTS:3}
+    max-attempts: ${AI_RETRY_MAX_ATTEMPTS:1}
     backoff:
       initial: ${AI_RETRY_BACKOFF_INITIAL:1s}
       max: ${AI_RETRY_BACKOFF_MAX:5s}
@@ -90,8 +90,8 @@ ai:
     cleanup-retention-days: ${AI_RECOMMENDATION_CLEANUP_RETENTION_DAYS:1}
   ollama:
     base-url: ${AI_OLLAMA_BASE_URL:http://localhost:11434}
-    model: ${AI_OLLAMA_MODEL:llama3.2:1b}
-    timeout: ${AI_OLLAMA_TIMEOUT:30s}
+    model: ${AI_OLLAMA_MODEL:qwen3:4b}
+    timeout: ${AI_OLLAMA_TIMEOUT:120s}
   clients:
     internal-header-name: ${AI_INTERNAL_HEADER_NAME:X-Internal-Api-Key}
     internal-api-key: ${AI_INTERNAL_API_KEY}
@@ -108,4 +108,4 @@ resilience4j:
   timelimiter:
     instances:
       ollama:
-        timeoutDuration: 60s
+        timeoutDuration: 120s
