@@ -53,7 +53,22 @@ public class OllamaClient {
         if (text == null || text.isBlank()) {
             return "";
         }
+        // Strip thinking block if model returned one despite think=false
+        text = stripThinkingBlock(text);
         return text.trim();
+    }
+
+    private String stripThinkingBlock(String text) {
+        if (text == null) return "";
+        // qwen3 thinking models wrap reasoning in <think>...</think> tags
+        int thinkEnd = text.lastIndexOf("</think>");
+        if (thinkEnd != -1) {
+            String afterThink = text.substring(thinkEnd + 8).trim();
+            if (!afterThink.isBlank()) {
+                return afterThink;
+            }
+        }
+        return text;
     }
 
     private String buildGenerateUrl(String baseUrl) {

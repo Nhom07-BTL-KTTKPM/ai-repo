@@ -13,4 +13,6 @@ public interface ProductViewLogRepository extends JpaRepository<ProductViewLogEn
     List<ProductViewLogEntity> findByCustomerIdOrderByViewedAtDesc(UUID customerId, Pageable pageable);
 
     void deleteByViewedAtBefore(Instant cutoff);
+
+    boolean existsByCustomerIdAndProductId(UUID customerId, UUID productId);
 }
