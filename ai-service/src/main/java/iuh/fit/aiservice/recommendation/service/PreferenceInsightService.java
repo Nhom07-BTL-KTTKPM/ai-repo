@@ -57,9 +57,15 @@ public class PreferenceInsightService {
 
         String prompt = buildPrompt(profile == null ? null : profile.getSkinType(), categories, brands, concerns);
         try {
-            String response = ollamaClient.generate(prompt);
+            String response = ollamaClient.generate(prompt, "json");
             if (response == null || response.isBlank()) {
                 return null;
+            }
+            int start = response.indexOf('{');
+            int end = response.lastIndexOf('}');
+            if (start != -1 && end != -1 && start <= end) {
+                String jsonContent = response.substring(start, end + 1);
+                return objectMapper.readValue(jsonContent, PreferenceInsight.class);
             }
             return objectMapper.readValue(response, PreferenceInsight.class);
         } catch (Exception ex) {
@@ -75,6 +81,7 @@ public class PreferenceInsightService {
             List<String> concerns
     ) {
         StringBuilder builder = new StringBuilder();
+        builder.append("/no_think\n");
         builder.append("You analyze user preferences for skincare products. ");
         builder.append("Return ONLY valid JSON with keys: preferredCategories, preferredBrands, preferredConcerns. ");
         builder.append("Choose ONLY from the provided lists. ");

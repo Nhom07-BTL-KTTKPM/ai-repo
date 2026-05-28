@@ -83,8 +83,8 @@ ai:
     ai-boost-category: ${AI_RECOMMENDATION_AI_BOOST_CATEGORY:0.05}
     ai-boost-brand: ${AI_RECOMMENDATION_AI_BOOST_BRAND:0.04}
     ai-boost-concern: ${AI_RECOMMENDATION_AI_BOOST_CONCERN:0.06}
-    ai-reason-enabled: ${AI_RECOMMENDATION_AI_REASON_ENABLED:false}
-    ai-preference-enabled: ${AI_RECOMMENDATION_AI_PREFERENCE_ENABLED:false}
+    ai-reason-enabled: ${AI_RECOMMENDATION_AI_REASON_ENABLED:true}
+    ai-preference-enabled: ${AI_RECOMMENDATION_AI_PREFERENCE_ENABLED:true}
     cleanup-cron: ${AI_RECOMMENDATION_CLEANUP_CRON:0 0 2 * * *}
     cleanup-keep-top: ${AI_RECOMMENDATION_CLEANUP_KEEP_TOP:10}
     cleanup-retention-days: ${AI_RECOMMENDATION_CLEANUP_RETENTION_DAYS:1}

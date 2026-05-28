@@ -281,6 +281,9 @@ public class RecommendationGenerator {
             double finalScore = baseScore + (0.1 * duplicates);
 
             String reason = explanationService.generateReason(profile, product);
+            if (reason != null && reason.length() > 500) {
+                reason = reason.substring(0, 497) + "...";
+            }
             RecommendationEntity entity;
             if (existing != null) {
                 entity = existing;

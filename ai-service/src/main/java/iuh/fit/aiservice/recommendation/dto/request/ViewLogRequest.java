@@ -21,4 +21,11 @@ public class ViewLogRequest {
     private ProductViewSource source;
 
     private String customerId;
+
+    /**
+     * Thời gian người dùng xem sản phẩm (đơn vị: giây).
+     * Chỉ khi >= 10 giây thì mới trigger tạo recommendation.
+     * Nếu null thì không trigger.
+     */
+    private Integer durationSeconds;
 }

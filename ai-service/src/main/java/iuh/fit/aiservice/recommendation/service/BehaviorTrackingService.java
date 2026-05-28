@@ -38,14 +38,29 @@ public class BehaviorTrackingService {
             .customerId(request.getCustomerId())
             .build();
 
-        return trackBehavior(eventRequest, customerId);
-        }
+        // Chỉ lưu log và trigger recommend nếu xem đủ >= 10 giây
+        boolean qualifiedView = request.getDurationSeconds() != null
+                && request.getDurationSeconds() >= 10;
 
-        @Transactional
-        public ViewLogResponse trackBehavior(BehaviorEventRequest request, UUID customerId) {
+        return trackBehaviorInternal(eventRequest, customerId, qualifiedView);
+    }
+
+    @Transactional
+    public ViewLogResponse trackBehavior(BehaviorEventRequest request, UUID customerId) {
+        // Gửi cờ trigger=true cho Cart/Purchase, nhưng bên trong vẫn bị chặn lại nếu sản phẩm đã tồn tại log
+        return trackBehaviorInternal(request, customerId, true);
+    }
+
+    private ViewLogResponse trackBehaviorInternal(BehaviorEventRequest request, UUID customerId, boolean triggerRecommendation) {
         ProductViewSource source = request.getSource() == null
             ? ProductViewSource.DIRECT
             : request.getSource();
+
+        // Kiểm tra xem user đã xem/tương tác với sản phẩm này bao giờ chưa
+        boolean alreadyViewed = false;
+        if (customerId != null) {
+            alreadyViewed = viewLogRepository.existsByCustomerIdAndProductId(customerId, request.getProductId());
+        }
 
         ProductViewLogEntity entity = ProductViewLogEntity.builder()
             .customerId(customerId)
@@ -57,7 +72,8 @@ public class BehaviorTrackingService {
 
         ProductViewLogEntity saved = viewLogRepository.save(entity);
 
-        if (customerId != null) {
+        // NẾU đã xem rồi thì KHÔNG chạy recommend nữa để tiết kiệm tài nguyên
+        if (customerId != null && triggerRecommendation && !alreadyViewed) {
             scheduleRecommendationGeneration(customerId);
         }
 

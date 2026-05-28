@@ -16,14 +16,14 @@ public interface CatalogProductClient {
     @GetMapping("/api/v1/catalog/products/{id}")
     CatalogProductResponse getProductById(@PathVariable("id") UUID id);
 
-    @GetMapping("/api/v1/catalog/products/category/{categoryId}")
+    @GetMapping("/internal/catalog/products/category/{categoryId}")
     CatalogPageResponse<CatalogProductResponse> getProductsByCategory(
             @PathVariable("categoryId") UUID categoryId,
             @RequestParam("page") int page,
             @RequestParam("size") int size
     );
 
-    @GetMapping("/api/v1/catalog/products/brand/{brandId}")
+    @GetMapping("/internal/catalog/products/brand/{brandId}")
     CatalogPageResponse<CatalogProductResponse> getProductsByBrand(
             @PathVariable("brandId") UUID brandId,
             @RequestParam("page") int page,
